@@ -1,0 +1,207 @@
+body_system	ltc
+SARS-CoV-2	SARS-CoV-2
+Congenital Disease	Congenital cardiac disease
+Congenital Disease	Down's syndrome
+Congenital Disease	Spina bifida
+Haematological Disorder	Aplastic anaemias
+Haematological Disorder	Folate deficiency, with and without anaemia
+Haematological Disorder	Immunodeficiencies
+Haematological Disorder	Iron deficiency with and without anaemia
+Haematological Disorder	Myelodysplastic syndromes
+Haematological Disorder	Other anaemias
+Haematological Disorder	Other haemolytic anaemias
+Haematological Disorder	Polycythaemia vera
+Haematological Disorder	Sarcoidosis
+Haematological Disorder	Secondary polycythaemia
+Haematological Disorder	Sickle-cell anaemia
+Haematological Disorder	Thalassaemia
+Haematological Disorder	Thrombocytopenia - primary, secondary and other
+Haematological Disorder	Thrombophilia
+Haematological Disorder	Vitamin B12 deficiency, with and without anaemia
+Cardiovascular Disease	Aortic aneurysm
+Cardiovascular Disease	Atrial fibrillation and flutter
+Cardiovascular Disease	Cardiac conduction defects
+Cardiovascular Disease	Cardiomyopathy other
+Cardiovascular Disease	Cerebrovascular disease
+Cardiovascular Disease	Coronary heart disease
+Cardiovascular Disease	Heart failure
+Cardiovascular Disease	Heart valve disease non-rheumatic
+Cardiovascular Disease	Hypertension
+Cardiovascular Disease	Hypertrophic Cardiomyopathy
+Cardiovascular Disease	Intracerebral haemorrhage
+Cardiovascular Disease	Peripheral arterial disease
+Cardiovascular Disease	Peripheral venous and lymphatic disease
+Cardiovascular Disease	Pulmonary hypertension
+Cardiovascular Disease	Rheumatic valve dz
+Cardiovascular Disease	Sick sinus syndrome
+Cardiovascular Disease	Subarachnoid haemorrhage
+Cardiovascular Disease	Subdural haematoma
+Cardiovascular Disease	Supraventricular tachycardia
+Cardiovascular Disease	Venous thromboembolism
+Digestive Disease	Autoimmune liver disease
+Digestive Disease	Barrett's oesophagus
+Digestive Disease	Cholelithiasis
+Digestive Disease	Coeliac disease
+Digestive Disease	Constipation
+Digestive Disease	Crohn's disease
+Digestive Disease	Diverticular disease of intestine
+Digestive Disease	Gastritis and duodenitis
+Digestive Disease	Gastrointestinal angiodysplasia
+Digestive Disease	Gastro-oesophageal reflux disease
+Digestive Disease	Hyposplenism
+Digestive Disease	Irritable bowel syndrome
+Digestive Disease	Liver failure and transplant
+Digestive Disease	Liver fibrosis, sclerosis and cirrhosis
+Digestive Disease	Non-alcoholic fatty liver disease and steatohepatitis
+Digestive Disease	Oesophagitis and oesophageal ulcer
+Digestive Disease	Pancreatitis
+Digestive Disease	Peptic ulcer disease
+Digestive Disease	Portal hypertension and oesophageal varices
+Digestive Disease	Ulcerative colitis
+Ear Disease	Hearing loss
+Ear Disease	Meniere disease
+Ear Disease	Tinnitus
+Eye Disease	Diabetic eye disease
+Eye Disease	Glaucoma
+Eye Disease	Macular degeneration
+Eye Disease	Ptosis of eyelid
+Eye Disease	Retinal detachments and breaks
+Eye Disease	Retinal vascular occlusions
+Eye Disease	Visual impairment and blindness
+Urogenital Disorder	Cervical carcinoma in situ
+Urogenital Disorder	Chronic Kidney Disease
+Urogenital Disorder	CKD_Stage_3
+Urogenital Disorder	CKD_Stage_5
+Urogenital Disorder	Cystic renal disease
+Urogenital Disorder	Dysmenorrhoea
+Urogenital Disorder	End stage renal disease
+Urogenital Disorder	Endometriosis
+Urogenital Disorder	Erectile dysfunction
+Urogenital Disorder	Female genital prolapse
+Urogenital Disorder	Female infertility
+Urogenital Disorder	Glomerulonephritis and other nephritides
+Urogenital Disorder	Hyperplasia of prostate
+Urogenital Disorder	Male infertility
+Urogenital Disorder	Menorrhagia and polymenorrhoea
+Urogenital Disorder	Neuromuscular dysfunction of bladder
+Urogenital Disorder	Non-acute cystitis
+Urogenital Disorder	Obstructive and reflux uropathy
+Urogenital Disorder	Polycystic ovarian syndrome
+Urogenital Disorder	Urinary Incontinence
+Urogenital Disorder	Urolithiasis
+Musculoskeletal Disease	Ankylosing spondylitis
+Musculoskeletal Disease	Collapsed vertebra
+Musculoskeletal Disease	Enteropathic arthropathy
+Musculoskeletal Disease	Enthesopathies & synovial disorders
+Musculoskeletal Disease	Fibromyalgia
+Musculoskeletal Disease	Fracture of hip
+Musculoskeletal Disease	Giant Cell arteritis
+Musculoskeletal Disease	Gout
+Musculoskeletal Disease	Intervertebral disc disorders
+Musculoskeletal Disease	Juvenile arthritis
+Musculoskeletal Disease	Lupus erythematosus (local and systemic)
+Musculoskeletal Disease	Osteoarthritis (excl spine)
+Musculoskeletal Disease	Osteoporosis
+Musculoskeletal Disease	Polymyalgia Rheumatica
+Musculoskeletal Disease	Psoriatic arthropathy
+Musculoskeletal Disease	Rheumatoid Arthritis
+Musculoskeletal Disease	Scoliosis
+Musculoskeletal Disease	Sjogren's disease
+Musculoskeletal Disease	Spinal stenosis
+Musculoskeletal Disease	Spondylolisthesis
+Musculoskeletal Disease	Spondylosis
+Musculoskeletal Disease	Systemic sclerosis
+Neurological Disease	Cerebral Palsy
+Neurological Disease	Chronic fatigue
+Neurological Disease	Diabetic neurological complications
+Neurological Disease	Epilepsy
+Neurological Disease	Intracranial hypertension
+Neurological Disease	Migraine
+Neurological Disease	Motor neuron disease
+Neurological Disease	Multiple sclerosis
+Neurological Disease	Myasthenia gravis
+Neurological Disease	Non-diabetic peripheral neuropathies (excluding cranial nerves and carpal tunnel syndrome)
+Neurological Disease	Painful conditions
+Neurological Disease	Parkinson's disease
+Neurological Disease	Sleep apnoea
+Neurological Disease	Trigeminal neuralgia
+Respiratory Disease	Allergic and chronic rhinitis
+Respiratory Disease	Asbestosis
+Respiratory Disease	Asthma
+Respiratory Disease	Bronchiectasis
+Respiratory Disease	Chronic sinusitis
+Respiratory Disease	COPD
+Respiratory Disease	Cystic Fibrosis
+Respiratory Disease	Hypertrophy of nasal turbinates
+Respiratory Disease	Nasal polyp
+Respiratory Disease	Other interstitial pulmonary diseases with fibrosis
+Respiratory Disease	Respiratory failure
+Skin Disease	Alopecia areata and scarring alopecia
+Skin Disease	Blistering autoimmune skin conditions
+Skin Disease	Chronic ulcer of the skin
+Skin Disease	Dermatitis (atopc/contact/other/unspecified)
+Skin Disease	Hidradenitis suppurativa
+Skin Disease	Lichen planus
+Skin Disease	Psoriasis
+Skin Disease	Rosacea
+Skin Disease	Seborrheic dermatitis
+Skin Disease	Urticaria
+Skin Disease	Vitiligo
+Metabolic and Endocrine	Adrenal insufficiency and Addison's disease
+Metabolic and Endocrine	Disorders of autonomic nervous system
+Metabolic and Endocrine	Hyperparathyroidism
+Metabolic and Endocrine	Hyperprolactinaemia and prolactinoma
+Metabolic and Endocrine	Hypopituitarism
+Metabolic and Endocrine	Obesity
+Metabolic and Endocrine	Thyroid disease
+Metabolic and Endocrine	Type 1 Diabetes
+Metabolic and Endocrine	Type 2 Diabetes
+Metabolic and Endocrine	Unspecified or Rare Diabetes
+Infectious Disease	Chronic viral hepatitis
+Infectious Disease	HIV
+Infectious Disease	Infection of bones and joints
+Infectious Disease	Tuberculosis
+Mental and Behavioural Disorder	ADHD and hyperkinetic disorders
+Mental and Behavioural Disorder	Alcohol dependence and related disease
+Mental and Behavioural Disorder	Anxiety and phobia
+Mental and Behavioural Disorder	Autism and Asperger's syndrome
+Mental and Behavioural Disorder	Bipolar affective disorder and mania
+Mental and Behavioural Disorder	Dementia
+Mental and Behavioural Disorder	Depression
+Mental and Behavioural Disorder	Eating disorders
+Mental and Behavioural Disorder	Learning disability
+Mental and Behavioural Disorder	Obsessive-compulsive disorder
+Mental and Behavioural Disorder	Other psychoactive substance misuse
+Mental and Behavioural Disorder	Personality disorder
+Mental and Behavioural Disorder	Post-traumatic stress and stress-related disorders
+Mental and Behavioural Disorder	Schizophrenia and non-organic psychosis
+Mental and Behavioural Disorder	Somatoform and dissociative disorders
+Cancer	Hodgkin Lymphoma
+Cancer	Leukaemia
+Cancer	Multiple myeloma and malignant plasma cell neoplasms
+Cancer	Non-Hodgkin Lymphoma
+Cancer	Non-malignant tumour of brain, central nervous system and pituitary
+Cancer	Primary malignancy biliary tract
+Cancer	Primary malignancy bladder
+Cancer	Primary malignancy bone and articular cartilage
+Cancer	Primary malignancy brain, other CNS and intracranial
+Cancer	Primary malignancy breast
+Cancer	Primary malignancy cervical
+Cancer	Primary malignancy colorectal and anus
+Cancer	Primary malignancy kidney and ureter
+Cancer	Primary malignancy liver
+Cancer	Primary malignancy lung and trachea
+Cancer	Primary malignancy malignant melanoma
+Cancer	Primary malignancy mesothelioma
+Cancer	Primary malignancy oesophageal
+Cancer	Primary malignancy ovarian
+Cancer	Primary malignancy pancreatic
+Cancer	Primary malignancy prostate
+Cancer	Primary malignancy stomach
+Cancer	Primary malignancy testicular
+Cancer	Primary malignancy thyroid
+Cancer	Primary malignancy uterine
+Cancer	Primary Malignancy_Oro-pharyngeal
+Cancer	Primary Malignancy_Other
+Cancer	Primary Malignancy_Other Skin and subcutaneous tissue
+Cancer	Secondary malignancy and metastasis
