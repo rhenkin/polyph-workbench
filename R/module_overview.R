@@ -1,3 +1,5 @@
+paired_choices <- c("Ethnic group" = "eth_group", "Sex" = "sex", "IMD quintile" = "imd_quintile", "Outcome age" = "age_group", "Time-to-outcome" = "tto_group", "# LTCs" = "mltc_group")
+
 #' @export
 module_overview_ui <- function(id) {
 	ns <- NS(id)
@@ -5,6 +7,14 @@ module_overview_ui <- function(id) {
 		card_header("Summary"),
 		accordion(
 			open = FALSE,
+			accordion_panel(
+				title = "Demographic distribution",
+				value = "demodists",
+				navset_tab(
+					nav_panel("Cohort table", gt_output(ns("demodist_table"))),
+					nav_panel("Distribution across polypharmacy levels", gt_output(ns("pp_demodist_table")))
+				)
+			),
 			accordion_panel(
 				title = "Overview of polypharmacy distribution for selected outcome",
 				value = "pphists",
@@ -20,32 +30,25 @@ module_overview_ui <- function(id) {
 				)
 			),
 			accordion_panel(
-				title = "Demographic distribution",
-				value = "demodists",
-				navset_tab(
-					nav_panel("Distribution per polypharmacy levels", gt_output(ns("pp_demodist_table"))),
-					nav_panel("Cohort table", gt_output(ns("demodist_table"))),
-
-				)
-			),
-			accordion_panel(
 				title = "Paired distributions of PP",
 				value = "pairedpp",
 				fluidRow(
-					column(width = 2, selectizeInput(ns("paired_x_variable"), "X variable", choices = c("eth_group", "sex", "imd_quintile","age_group", "tto_group"))),
+					column(width = 2, selectizeInput(ns("paired_x_variable"), "X variable", choices = paired_choices)),
 					column(width = 1,
 								 actionButton(ns("swap_vars"), label = "↔",
 								 						 style = "margin-top: 30px;display: block; margin-left: auto; margin-right: auto;")),
-					column(width = 2, selectizeInput(ns("paired_y_variable"), "Y variable", choices = c("eth_group", "sex", "imd_quintile","age_group", "tto_group"), selected = "sex"))
+					column(width = 2, selectizeInput(ns("paired_y_variable"), "Y variable", choices = paired_choices, selected = "sex"))
 				),
 				fluidRow(
 					vegawidgetOutput(ns("paired_heatmap"))
 				)
 			),
 			accordion_panel(
-				title = "Association between PP and time-to-outcome",
+				title = "Time-to-outcome versus PP burden from last prescription",
 				value = "pptime",
-				dataTableOutput(ns("pp_cor_table"))
+				#div("Time measured in days"),
+				vegawidgetOutput(ns("tto_curve")),
+				#dataTableOutput(ns("pp_cor_table"))
 			)
 		)
 	)
@@ -56,31 +59,12 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 	moduleServer(id, function(input, output, session) {
 		ns <- session$ns
 
-		# Helper functions
-		create_age_groups <- function(dt, n_groups = 5) {
-			dt_copy <- copy(dt)
-
-			# Calculate break points
-			breaks <- quantile(dt_copy$age_days/365.25, probs = seq(0, 1, length.out = n_groups + 1))
-
-			# Create labels showing the ranges
-			labels <- paste(round(breaks[-length(breaks)]), "to", round(breaks[-1]), "years")
-
-			# Add group column using the range labels
-			dt_copy[, age_group := cut(age_days/365.25,
-																 breaks = breaks,
-																 labels = labels,
-																 include.lowest = TRUE,
-																 ordered_result = TRUE)]
-			setkey(dt_copy, patid)
-			return(dt_copy)
-		}
-
 		# Core reactive data sources
 		polypharmacy_counts <- reactive({
 			df <- outcome_prescriptions()
 			df <-
 				unique(df[, list(
+					mltc_group,
 					pp = length(unique(substance)),
 					first_prescription = min(start_date),
 					last_prescription = max(start_date),
@@ -220,14 +204,18 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 			imd_df[, group := "IMD Quintile"]
 			imd_df[, pct_total := signif(N/total_patids, digits = 2)]
 			imd_df <- merge(imd_df, pp_frequencies(pp_df, "imd_quintile"), by = "imd_quintile")
-
 			setorder(imd_df, imd_quintile)
+
 			age_df <- pp_df[, .N, age_group]
 			age_df[, group := "Age at outcome"]
 			age_df[, pct_total := signif(N/total_patids, digits = 2)]
 			age_df <- merge(age_df, pp_frequencies(pp_df, "age_group"), by = "age_group")
-
 			setorder(age_df, age_group)
+
+			mltc_df <- pp_df[, .N, mltc_group]
+			mltc_df[, group := "# LTCs"]
+			mltc_df[, pct_total := signif(N/total_patids, digits = 2)]
+			mltc_df <- merge(mltc_df, pp_frequencies(pp_df, "mltc_group"), by = "mltc_group")
 
 			to_print <-
 				rbindlist(
@@ -235,7 +223,8 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 						sex_df,
 						eth_df,
 						imd_df,
-						age_df
+						age_df,
+						mltc_df
 					),
 					use.names = FALSE)
 			colnames(to_print) <- c("Category", "N", "group", "%", "pp_labels", "pp_values")
@@ -285,23 +274,29 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 		})
 
 		# 9. Association between PP and time-to-outcome
-		output$pp_cor_table <- renderDataTable({
+		output$tto_curve <- renderVegawidget({
 			df <- outcome_prescriptions()
-			setkey(df, patid)
+			#setkey(df, patid)
 			results <- df[, list(
 				time_to_outcome = as.IDate(eventdate) - max(as.IDate(start_date)),
 				pp = .N
 			), patid] |> unique()
-			summary_stats <- results[, .(
-				n = .N,
-				mean_time = mean(time_to_outcome, na.rm = TRUE),
-				median_time = median(time_to_outcome, na.rm = TRUE),
-				sd_time = sd(time_to_outcome, na.rm = TRUE),
-				min_time = min(time_to_outcome, na.rm = TRUE),
-				max_time = max(time_to_outcome, na.rm = TRUE)
-			), by = pp]
-			setorder(summary_stats, pp)
-			summary_stats
+
+			summary_stats <- results[order(pp), c(.N,as.list(quantile(time_to_outcome, c(0.25,0.5,0.75)))), pp]
+			colnames(summary_stats) <- c("pp", "N", "iqr1", "median", "iqr2")
+
+			tto_line_plot(summary_stats) |> as_vegaspec()
+			# summary_stats <- results[, .(
+			# 	n = .N,
+			# 	mean_time = round(mean(time_to_outcome, na.rm = TRUE), digits = 2),
+			# 	median_time = round(median(time_to_outcome, na.rm = TRUE, digits = 2)),
+			# 	sd_time = round(sd(time_to_outcome, na.rm = TRUE), digits = 2),
+			# 	min_time = min(time_to_outcome, na.rm = TRUE),
+			# 	max_time = max(time_to_outcome, na.rm = TRUE)
+			# ), by = pp]
+			# setorder(summary_stats, pp)
+			# browser()
+			# summary_stats
 		})
 
 	})

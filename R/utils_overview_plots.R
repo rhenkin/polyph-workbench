@@ -254,3 +254,50 @@ pairedBarCharts <- function(df, x, y) {
     )
   ) |> as_vegaspec()
 }
+
+
+tto_line_plot <- function(df) {
+	list(
+		`$schema` = vega_schema(),
+		data = list(values = df),
+		height = 400,
+		layer = list(
+			list(
+				mark = list(type = "area", color = "#008", opacity = 0.1),
+				encoding = list(
+					x = list(
+						field = "pp",
+						type = "ordinal",
+						title = "Polypharmacy burden"
+					),
+					y = list(
+						field = "iqr1",
+						type = "quantitative"
+					),
+					y2 = list(
+						field = "iqr2",
+						type = "quantitative"
+					)
+				)
+			),
+			list(
+				mark = "line",
+				encoding = list(
+					x = list(
+						field = "pp",
+						type = "ordinal",
+						title = "Polypharmacy burden"
+					),
+					y = list(
+						field = "median",
+						type = "quantitative",
+						title = "Median time (days)"
+					)
+				)
+			)
+		)
+
+
+	)
+
+}

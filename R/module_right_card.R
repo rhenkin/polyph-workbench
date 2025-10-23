@@ -1,6 +1,7 @@
 right_card_ui <- function(id) {
   ns <- NS(id)
-  card(card_header("Drug filtering"),
+  # card(card_header("Drug filtering"),
+  list(
        tagList(
          tags$style(HTML(sprintf("
       #%s .excluded-item, #%s .included-item {
@@ -49,10 +50,12 @@ right_card_ui <- function(id) {
                         value = 0),
 
            numericInput(ns("earliest_treatment_end"),
-           						 "Earliest treatment end",
-           						 value = 30),
+           						 "Earliest treatment end until outcome (days):",
+           						 value = 84),
 
            # Chapter selection
+           bnf_table_ui(ns("bnf_table_module")),
+           div("Choose BNF levels for inclusion or exclusion"),
            div(class = "select-container",
                actionButton(ns("add_chapter"), "+", class = "action-btn"),
                selectInput(ns("chapter"),
@@ -106,9 +109,34 @@ right_card_server <- function(id, bnf_lookup) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
+  #   lookup_for_modal <- unique(bnf_lookup[,.(BNF_Chapter, BNF_Section, BNF_Paragraph, BNF_Chemical_Substance)])
+  #
+  #   observeEvent(input$show_bnf_table, {
+  #   	showModal(modalDialog(size = "l",
+  #   		title = "BNF Table",
+  # 			dataTableOutput(ns("bnf_table")),
+  #   		easyClose = TRUE,
+  #   		footer = NULL
+  #   	))
+  #   })
+  #
+  #   output$bnf_table <- renderDT({
+  #   	datatable(lookup_for_modal,
+  #   						rownames = FALSE, filter = "top")
+  #   })
+
     # Reactive values to store included and excluded BNFs
     included_bnfs <- reactiveVal(list())
-    excluded_bnfs <- reactiveVal(list())
+    excluded_bnfs <- reactiveVal(list(
+    	list(category = "Chapter", value = "Anaesthesia"),
+    	list(category = "Chapter", value = "Appliances"),
+    	list(category = "Chapter", value = "Dressings"),
+    	#list(category = "Chapter", value = "Ear, Nose And Oropharynx"),
+    	list(category = "Chapter", value = "Immunological Products & Vaccines"),
+    	list(category = "Chapter", value = "Incontinence Appliances"),
+    	list(category = "Chapter", value = "Other Drugs And Preparations"),
+    	list(category = "Chapter", value = "Stoma Appliances")
+    ))
 
     # Update Chapter choices on initialization
     observe({
@@ -258,6 +286,8 @@ right_card_server <- function(id, bnf_lookup) {
         excluded_bnfs(current)
       }
     })
+
+    bnf_table_server("bnf_table_module", bnf_lookup)
 
     # Return both reactive values
     return(list(

@@ -14,7 +14,7 @@ create_value_groups <- function(dt,
                                 label_fmt = "[%g-%g]",
                                 right = TRUE,
                                 label_suffix = NULL) {
-  dt_copy <- copy(dt)
+	dt_copy <- copy(dt)
   if(max(breaks) < max(dt_copy[[value_col]], na.rm=TRUE)) {
     breaks <- c(breaks, max(dt_copy[[value_col]], na.rm=TRUE))
   }
@@ -30,6 +30,25 @@ create_value_groups <- function(dt,
                                ordered = TRUE)][,.("patid", group_col)]
   setkey(dt_copy, patid)
   return(dt_copy)
+}
+
+create_age_groups <- function(dt, n_groups = 5) {
+	dt_copy <- copy(dt)
+
+	# Calculate break points
+	breaks <- quantile(dt_copy$age_days/365.25, probs = seq(0, 1, length.out = n_groups + 1))
+
+	# Create labels showing the ranges
+	labels <- paste(round(breaks[-length(breaks)]), "to", round(breaks[-1]), "years")
+
+	# Add group column using the range labels
+	dt_copy[, age_group := cut(age_days/365.25,
+														 breaks = breaks,
+														 labels = labels,
+														 include.lowest = TRUE,
+														 ordered_result = TRUE)]
+	setkey(dt_copy, patid)
+	return(dt_copy)
 }
 
 create_pp_groups <- function(dt) {
@@ -51,6 +70,7 @@ create_pp_groups <- function(dt) {
   setkey(dt_copy, patid)
   return(dt_copy)
 }
+
 calculate_age_standardized_medians <- function(dt,
                                                value_col = "pp",
                                                group_col = "eth_group",
@@ -130,21 +150,170 @@ calculate_category_totals <- function(df, demog_var) {
 }
 
 # Helper function to calculate demographic statistics
-calculate_demographic_stats <- function(df, demog_var, subst_frequency) {
+calculate_demographic_stats <- function(df, demog_var, frequency_data, condition_col) {
 	# Calculate counts by demographic category and substance
 	df_stats <- df[, .(
 		N_category = uniqueN(patid)
-	), by = c(demog_var, "substance")]
+	), by = c(demog_var, condition_col)]
 
 	# Merge with substance frequency data
-	df_stats <- merge(
-		df_stats,
-		subst_frequency[, .(substance, N)],
-		by = "substance"
-	)
+	merge_cols <- c(condition_col, "N")
+	df_stats <- merge(df_stats, frequency_data[, ..merge_cols], by = condition_col)
 
 	# Calculate percentages
 	df_stats[, pct := signif(N_category/N, digit = 2)]
 
 	return(df_stats)
+}
+
+
+# poly_level_category <- function(level) {
+# 	dplyr::case_when(
+# 		level == 0 ~ "[0]",
+# 		level == 1 ~ "[1]",
+# 		level >= 2 & level <= 3 ~ "[2-3]",
+# 		level >= 4 & level <= 5 ~ "[4-5]",
+# 		level >= 6 & level <= 7 ~ "[6-7]",
+# 		level >= 8 & level <= 10 ~ "[8-10]",
+# 		level >= 11 ~ "[11-29]",
+# 		TRUE ~ NA_character_
+# 	)
+# }
+
+poly_level_category <- function(level) {
+	dplyr::case_when(
+		level == 0 ~ "[0]",
+		level == 1 ~ "[1]",
+		level == 2 ~ "[2]",
+		level == 3 ~ "[3]",
+		level == 4 ~ "[4]",
+		level >= 5 & level <= 10 ~ "[5-10]",
+		level >= 11 ~ "[11+]",
+		TRUE ~ NA_character_
+	)
+}
+
+
+analyze_medications <- function(input_med_data, mode = "transition") {
+	# Define the correct order for polypharmacy categories
+	#level_order <- c("[0]", "[1]", "[2-3]", "[4-5]", "[6-7]", "[8-10]", "[11-29]")
+	level_order <- c("[0]", "[1]", "[2]", "[3]", "[4]", "[5-10]", "[11+]")
+
+	# Process medication data by patient
+	# patient_meds <- med_data[, {
+	# 	# Create sequence number for each medication
+	# 	med_seq <- 1:.N
+	#
+	# 	# Calculate the actual polypharmacy level BEFORE adding each medication
+	# 	# This represents the number of medications BEFORE this substance was added
+	# 	poly_level_before <- med_seq - 1
+	#
+	# 	# Categories
+	# 	level_cat_before <- poly_level_category(poly_level_before)
+	# 	level_cat_after <- poly_level_category(med_seq)
+	#
+	# 	# Flag transitions
+	# 	is_transition <- level_cat_before != level_cat_after
+	#
+	# 	list(
+	# 		patid = patid,
+	# 		substance = substance,
+	# 		med_seq = med_seq,
+	# 		poly_level_before = poly_level_before,
+	# 		poly_level_after = med_seq,
+	# 		level_cat_before = level_cat_before,
+	# 		level_cat_after = level_cat_after,
+	# 		is_transition = is_transition,
+	# 		days_to_outcome = eventdate-start_date
+	# 	)
+	# }, by = patid]
+	med_data <- data.table::copy(input_med_data)
+	setkey(med_data, patid, eventdate)
+
+	# Allocate the result columns directly
+	med_data[, med_seq := seq_len(.N), by = patid]
+	med_data[, poly_level_before := med_seq - 1]
+	med_data[, poly_level_after := med_seq]
+
+	# Apply the categorization function once to the entire columns
+	med_data[, level_cat_before := poly_level_category(poly_level_before)]
+	med_data[, level_cat_after := poly_level_category(poly_level_after)]
+
+	# Calculate transitions
+	med_data[, is_transition := level_cat_before != level_cat_after]
+	med_data[, days_to_outcome := eventdate - start_date]
+
+	# Select only the columns we need for the result
+	med_data <- med_data[, .(
+		patid, substance, med_seq,
+		poly_level_before, poly_level_after,
+		level_cat_before, level_cat_after,
+		is_transition, days_to_outcome
+	)]
+	patient_meds <- med_data
+
+	# # Alternatively, if you don't want to modify the original data:
+	# patient_meds <- copy(med_data)[, `:=`(
+	# 	med_seq = seq_len(.N),
+	# 	poly_level_before = seq_len(.N) - 1,
+	# 	poly_level_after = seq_len(.N)
+	# ), by = patid]
+	#
+	# patient_meds[, `:=`(
+	# 	level_cat_before = poly_level_category(poly_level_before),
+	# 	level_cat_after = poly_level_category(poly_level_after),
+	# 	is_transition = NULL,
+	# 	days_to_outcome = eventdate - start_date
+	# )]
+	#
+	# patient_meds[, is_transition := level_cat_before != level_cat_after]
+
+
+	# Filter for frequent medications
+	frequent_meds <- patient_meds[, .(
+		count = .N,
+		prevalence = .N / nrow(patient_meds) * 100
+	), by = substance][prevalence >= 1, substance]
+
+	# Choose analysis based on mode
+	if(mode == "transition") {
+		substance_data <- patient_meds[substance %in% frequent_meds, .(
+			count = .N
+		), by = .(substance, level_cat_before, level_cat_after)]
+
+		# Order for transitions
+		result <- dcast(
+			substance_data,
+			substance ~ paste(level_cat_before, "→", level_cat_after),
+			value.var = "count",
+			fill = 0
+		)
+	} else if(mode == "level") {
+		# For level mode, we're interested in the polypharmacy level BEFORE
+		# this substance was added (the context in which it was prescribed)
+		substance_data <- patient_meds[substance %in% frequent_meds, .(
+			count = .N
+		), by = .(substance, level_cat_before)]
+
+		# Order categories correctly
+		substance_data[, level_cat_before := factor(level_cat_before, levels = level_order)]
+
+		result <- dcast(
+			substance_data,
+			substance ~ level_cat_before,
+			value.var = "count",
+			fill = 0
+		)
+	}
+
+	# Calculate total
+	level_cols <- intersect(names(result), c(level_order, paste(level_order, "→", level_order, sep="")))
+	result[, total := rowSums(.SD), .SDcols = level_cols]
+
+	# Calculate percentages
+	result[, (level_cols) := lapply(.SD, function(x) round((x / total) * 100, 1)),
+				 .SDcols = level_cols]
+
+	# Return ordered results
+	return(result[order(-total)])
 }

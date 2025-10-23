@@ -230,12 +230,12 @@ calculate_substance_model <- function(subst_pp_df, patient_data, predictor_vars,
 
   # Create binary columns for substances using dcast
   binary_dt <- dcast(subst_pp_df, patid ~ substance, fun.aggregate = length)
-  model_dt <- merge(binary_dt, unique(subst_pp_df[, .(patid, pp, outcome_age, n_ltc)]), by = "patid")
+  model_dt <- merge(binary_dt, unique(subst_pp_df[, .(patid, pp, pp_group, outcome_age, n_ltc)]), by = "patid")
 
   # Merge with demographic data
   model_dt <- merge(
     model_dt,
-    patient_data[, c("patid", setdiff(predictor_vars, "outcome_age")), with = FALSE],
+    patient_data[, c("patid", setdiff(predictor_vars,c("pp_group", "outcome_age"))), with = FALSE],
     by = "patid",
     all.x = TRUE,
     all.y = FALSE
@@ -252,13 +252,20 @@ calculate_substance_model <- function(subst_pp_df, patient_data, predictor_vars,
     n_exposed <- sum(model_dt[[substance_name]])
 
     for (var in predictor_vars) {
-      if (is.factor(model_dt[[var]]) || is.character(model_dt[[var]])) {
-        model_dt[[var]] <- as.factor(model_dt[[var]])
-        # Set most frequent level as reference
-        freq_table <- table(model_dt[[var]])
-        ref_level <- names(freq_table)[which.max(freq_table)]
-        model_dt[[var]] <- relevel(model_dt[[var]], ref = ref_level)
-      }
+    	if (is.factor(model_dt[[var]]) || is.character(model_dt[[var]])) {
+    		# Convert to factor if it's not already
+    		if (!is.factor(model_dt[[var]])) {
+    			model_dt[[var]] <- as.factor(model_dt[[var]])
+    		}
+
+    		# Only relevel if it's not an ordered factor
+    		if (!is.ordered(model_dt[[var]])) {
+    			# Set most frequent level as reference
+    			freq_table <- table(model_dt[[var]])
+    			ref_level <- names(freq_table)[which.max(freq_table)]
+    			model_dt[[var]] <- relevel(model_dt[[var]], ref = ref_level)
+    		}
+    	}
     }
 
     # Check for small groups in categorical variables
@@ -286,10 +293,14 @@ calculate_substance_model <- function(subst_pp_df, patient_data, predictor_vars,
     )
     model_formula <- as.formula(model_formula)
     model_dt[, outcome_age := outcome_age/365.25]
+    if ("pp_group" %in% predictor_vars) {
+    	model_dt$pp_group <- factor(model_dt$pp_group, ordered = FALSE)
+    }
     tryCatch({
       if (model_type == "logistic") {
         # Check for rare events
       # Standard logistic regression with increased iterations
+      	browser()
           model <- glm(model_formula,
           						 data = model_dt[get(substance_name)<2],
           						 family = binomial(link = "logit"))
@@ -363,7 +374,7 @@ calculate_substance_model <- function(subst_pp_df, patient_data, predictor_vars,
       return(wide_results)
     }
 
-    results <- format_model_results(results)
+    #results <- format_model_results(results)
 
     message("Finished models ", Sys.time())
     return(results)

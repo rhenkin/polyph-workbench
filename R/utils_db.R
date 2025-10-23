@@ -68,12 +68,12 @@ buildWhereConditions <- function(terms = NULL,
 #
 #   conditions <- buildWhereConditions(terms, start_date, eth_group, sex, imd_quintile, outcome)
 #
-#   from_sub_query <- "first_outcomes_ever"
-#   if (!is.null(terms)) from_sub_query <- paste(from_sub_query, "JOIN gold_cp_ltc USING (patid)")
-#   if (!is.null(eth_group) | !is.null(sex) | !is.null(imd_quintile)) from_sub_query <- paste(from_sub_query, "JOIN gold_cp_patient USING (patid)")
+#   from_sub_query <- "gold_outcomes"
+#   if (!is.null(terms)) from_sub_query <- paste(from_sub_query, "JOIN gold_ltc USING (patid)")
+#   if (!is.null(eth_group) | !is.null(sex) | !is.null(imd_quintile)) from_sub_query <- paste(from_sub_query, "JOIN gold_patient USING (patid)")
 #
 #   base_sql <- paste("SELECT patid,substance,start_date,stop_date,duration FROM gold_cp WHERE EXISTS (SELECT 1 FROM", from_sub_query)
-#   query <- paste0(base_sql, " ", conditions$sql, " AND gold_cp.patid = first_outcomes_ever.patid)")
+#   query <- paste0(base_sql, " ", conditions$sql, " AND gold_cp.patid = gold_outcomes.patid)")
 #   print(query)
 #   return(list(query = query, params = conditions$params))
 # }
@@ -87,14 +87,14 @@ buildAcutePrescriptionQuery <- function(terms = NULL,
 	conditions <- buildWhereConditions(terms, start_date, eth_group, sex, imd_quintile, outcome)
 
 	# Start building the subquery
-	subquery_tables <- "first_outcomes_ever"
-	if (!is.null(terms)) subquery_tables <- paste(subquery_tables, "JOIN gold_cp_ltc USING (patid)")
-	if (!is.null(eth_group) | !is.null(sex) | !is.null(imd_quintile)) subquery_tables <- paste(subquery_tables, "JOIN gold_cp_patient USING (patid)")
+	subquery_tables <- "gold_outcomes"
+	if (!is.null(terms)) subquery_tables <- paste(subquery_tables, "JOIN gold_ltc USING (patid)")
+	if (!is.null(eth_group) | !is.null(sex) | !is.null(imd_quintile)) subquery_tables <- paste(subquery_tables, "JOIN gold_patient USING (patid)")
 
 	# Create the optimized query using JOIN instead of EXISTS
-	base_sql <- paste0("SELECT gc.patid, gc.substance, gc.start_date, gc.stop_date, gc.duration FROM gold_acute_presc gc JOIN ( SELECT DISTINCT first_outcomes_ever.patid FROM ", subquery_tables)
+	base_sql <- paste0("SELECT gc.patid, gc.substance, gc.start_date, gc.stop_date FROM gold_acute_presc gc JOIN ( SELECT DISTINCT gold_outcomes.patid FROM ", subquery_tables)
 
-	query <- paste0(base_sql, " ", conditions$sql, ") fo ON gc.patid = fo.patid")
+	query <- paste0(base_sql, " ", conditions$sql, ") ON gc.patid = patid")
 	print(query)
 	return(list(query = query, params = conditions$params))
 }
@@ -108,14 +108,14 @@ buildPrescriptionQuery <- function(terms = NULL,
 	conditions <- buildWhereConditions(terms, start_date, eth_group, sex, imd_quintile, outcome)
 
 	# Start building the subquery
-	subquery_tables <- "first_outcomes_ever"
-	if (!is.null(terms)) subquery_tables <- paste(subquery_tables, "JOIN gold_cp_ltc USING (patid)")
-	if (!is.null(eth_group) | !is.null(sex) | !is.null(imd_quintile)) subquery_tables <- paste(subquery_tables, "JOIN gold_cp_patient USING (patid)")
+	subquery_tables <- "gold_outcomes"
+	if (!is.null(terms)) subquery_tables <- paste(subquery_tables, "JOIN gold_ltc USING (patid)")
+	if (!is.null(eth_group) | !is.null(sex) | !is.null(imd_quintile)) subquery_tables <- paste(subquery_tables, "JOIN gold_patient USING (patid)")
 
 	# Create the optimized query using JOIN instead of EXISTS
-	base_sql <- paste0("SELECT gc.patid, gc.substance, gc.start_date, gc.stop_date, gc.duration FROM gold_cp gc JOIN ( SELECT DISTINCT first_outcomes_ever.patid FROM ", subquery_tables)
+	base_sql <- paste0("SELECT gc.patid, gc.substance, gc.start_date, gc.stop_date, gc.duration FROM gold_cp gc JOIN ( SELECT DISTINCT outcome FROM ", subquery_tables)
 
-	query <- paste0(base_sql, " ", conditions$sql, ") fo ON gc.patid = fo.patid")
+	query <- paste0(base_sql, " ", conditions$sql, ") ON gc.patid = patid")
 	print(query)
 	return(list(query = query, params = conditions$params))
 }
@@ -131,11 +131,11 @@ buildLtcQuery <- function(terms = NULL,
   conditions <- buildWhereConditions(terms, start_date, eth_group, sex, imd_quintile, outcome, param_count_init = 1)
 
   from_sub_query <- ""
-  if (!is.null(eth_group) | !is.null(sex) | !is.null(imd_quintile)) from_sub_query <- paste(from_sub_query, "INNER JOIN gold_cp_patient gcp ON gcp.patid = fo.patid")
+  if (!is.null(eth_group) | !is.null(sex) | !is.null(imd_quintile)) from_sub_query <- paste(from_sub_query, "INNER JOIN gold_patient gcp ON gcp.patid = fo.patid")
 
-  #base_sql <- paste("SELECT patid,eventdate,age_days,term FROM gold_cp_ltc gl WHERE EXISTS (SELECT 1 FROM", from_sub_query)
-  #base_sql <- paste("WITH first_outcome_dates AS (SELECT DISTINCT patid, MIN(eventdate) as first_outcome_date FROM first_outcomes_ever WHERE outcome = $1 GROUP BY patid) SELECT gl.patid, gl.eventdate, gl.age_days, gl.term FROM first_outcome_dates fo INNER JOIN gold_cp_ltc gl ON gl.patid = fo.patid AND gl.eventdate <= fo.first_outcome_date")
-  base_sql <- "SELECT gl.patid, gl.eventdate, gl.age_days, gl.term FROM first_outcomes_ever fo JOIN gold_cp_ltc gl ON gl.patid = fo.patid AND gl.eventdate <= fo.eventdate"
+  #base_sql <- paste("SELECT patid,eventdate,age_days,term FROM gold_ltc gl WHERE EXISTS (SELECT 1 FROM", from_sub_query)
+  #base_sql <- paste("WITH first_outcome_dates AS (SELECT DISTINCT patid, MIN(eventdate) as first_outcome_date FROM gold_outcomes WHERE outcome = $1 GROUP BY patid) SELECT gl.patid, gl.eventdate, gl.age_days, gl.term FROM first_outcome_dates fo INNER JOIN gold_ltc gl ON gl.patid = fo.patid AND gl.eventdate <= fo.first_outcome_date")
+  base_sql <- "SELECT gl.patid, gl.eventdate, gl.age_days, gl.term FROM gold_outcomes fo JOIN gold_ltc gl ON gl.patid = fo.patid AND gl.eventdate <= fo.eventdate"
   base_sql <- paste(base_sql, from_sub_query)
   #conditions$params <- c(outcome, conditions$params)
   query <- paste0(base_sql, " ", conditions$sql)
@@ -151,9 +151,9 @@ buildPatientQuery <- function(terms = NULL,
                               outcome = NULL) {
   conditions <- buildWhereConditions(terms, NULL, eth_group, sex, imd_quintile, outcome)
   if (is.null(terms)) {
-    base_sql <- "SELECT DISTINCT patid, dob, gender as sex, eth_group, imd_quintile FROM gold_cp_patient JOIN first_outcomes_ever USING (patid)"
+    base_sql <- "SELECT DISTINCT patid, dob, gender as sex, eth_group, imd_quintile FROM gold_patient JOIN gold_outcomes USING (patid)"
   } else {
-    base_sql <- "SELECT DISTINCT patid, dob, gender as sex, eth_group, imd_quintile FROM gold_cp_patient JOIN first_outcomes_ever USING (patid) JOIN gold_cp_ltc USING (patid)"
+    base_sql <- "SELECT DISTINCT patid, dob, gender as sex, eth_group, imd_quintile FROM gold_patient JOIN gold_outcomes USING (patid) JOIN gold_ltc USING (patid)"
   }
   query <- paste0(base_sql, " ", conditions$sql)
   print(query)
@@ -161,7 +161,7 @@ buildPatientQuery <- function(terms = NULL,
 }
 
 buildOutcomeQuery <- function(outcome) {
-  query <- "SELECT patid,eventdate,age_days,outcome as term FROM first_outcomes_ever WHERE outcome = $1"
+  query <- "SELECT patid,eventdate,age_days,outcome as term FROM gold_outcomes WHERE outcome = $1"
   return(list(query = query, params = list(outcome)))
 }
 
@@ -174,7 +174,7 @@ buildOutcomeLtcOptionsQuery <-  function(terms = NULL,
 
   conditions <- buildWhereConditions(terms, start_date, eth_group, sex, imd_quintile)
 
-  base_sql <- "SELECT DISTINCT term FROM gold_cp_patient JOIN gold_cp_ltc USING (patid)"
+  base_sql <- "SELECT DISTINCT term FROM gold_patient JOIN gold_ltc USING (patid)"
 
   query <- paste0(base_sql, " ", conditions$sql)
   return(list(query = query, params = conditions$params))
@@ -184,5 +184,5 @@ buildOutcomeLtcOptionsQuery <-  function(terms = NULL,
 buildLtcDatesQuery <- function(ltc_name) {
   # query <- "SELECT patid, eventdate FROM ltc WHERE term IN ($1)"
   # return(list(query = query, param = ltc_name))
-  paste0("SELECT patid, eventdate, age_days FROM gold_cp_ltc WHERE term = ", ltc_name, " AND patid IN (SELECT patid FROM gold_cp)")
+  paste0("SELECT patid, eventdate, age_days FROM gold_ltc WHERE term = ", ltc_name, " AND patid IN (SELECT patid FROM gold_cp)")
 }

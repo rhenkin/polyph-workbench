@@ -5,14 +5,34 @@ module_ltc_explorer_ui <- function(id) {
     accordion(
       open = FALSE,
       accordion_panel(
-        title = "Frequency table",
+        title = "Prevalence table",
         navset_tab(
-          nav_panel("Cohort frequency", dataTableOutput(ns("ltc_freq_table"))),
-          nav_panel("Frequency across demographics",
-                    selectizeInput(ns("select_ltcdemog_freq_var"), label = "Select variable:", choices = c("sex", "eth_group",  "imd_quintile", "pp_group")),
+          nav_panel("Cohort prevalence", dataTableOutput(ns("ltc_freq_table"))),
+          nav_panel("Prevalence across demographics",
+                    selectizeInput(ns("select_ltcdemog_freq_var"), label = "Select variable:", choices = c("Sex" = "sex","Ethnic group" = "eth_group", "IMD quintile" = "imd_quintile", "PP" = "pp_group", "# LTCs" = "mltc_group")),
                     dataTableOutput(ns("demog_ltc_freq_table")))
         )
-      )
+      ),
+      accordion_panel(
+      	"LTC prevalence per drug",
+      	card(full_screen = TRUE,
+      			 height = "60em",
+      		fluidRow(column(6,
+      										# uiOutput(ns("drug_dropdown_ui"))
+
+      										selectizeInput(ns("drug_dropdown"), label = "Select 1 or more substance:", choices = NULL, multiple = TRUE,
+      																			options = list(
+      																				splitOn = ';'
+      																			)
+      																			),
+      										textInput(ns("paste_substances"),
+      															label = "Or paste semicolon-separated list:",
+      															placeholder = "Paracetamol; Aspirin")
+      										),
+      						 column(5, numericInput(ns("outcome_age_filter"), label = "Max age at outcome:", value = 100, min = 16, max = 100)),
+      						 column(1, textOutput(ns("selected_pats")))),
+      		dataTableOutput(ns("ltc_by_presc"))
+      	))
       # accordion_panel(
       #   title = "Network",
       #   value = "ltcnet",
@@ -22,9 +42,9 @@ module_ltc_explorer_ui <- function(id) {
   )
 }
 
-module_ltc_explorer_server <- function(id, outcome_prescriptions, ltc_data, patient_data) {
+module_ltc_explorer_server <- function(id, outcome_prescriptions, ltc_data, patient_data, pp_groups_data) {
   moduleServer(id, function(input, output, session) {
-    ns <- NS(id)
+    ns <- session$ns
     ltc_chapters <- fread("chapters.tsv")
     valid_ltcs <- reactive({
       outcome_df <- outcome_prescriptions()
@@ -34,6 +54,7 @@ module_ltc_explorer_server <- function(id, outcome_prescriptions, ltc_data, pati
 
     ltc_freq_df <- reactive({
       ltcs <- valid_ltcs()
+
       term_freq <- ltcs[,.N,.(term)]
       total_patids <- length(unique(ltcs$patid))
       term_freq[, pct_total := signif(N/total_patids, digits = 2)]
@@ -47,65 +68,120 @@ module_ltc_explorer_server <- function(id, outcome_prescriptions, ltc_data, pati
     output$demog_ltc_freq_table <- renderDataTable({
       req(input$select_ltcdemog_freq_var)
       df <- valid_ltcs()
+      outcome_df <- outcome_prescriptions()
       demog_var <- input$select_ltcdemog_freq_var
-      #df <- patient_data()[df]
+
       df <- merge(patient_data(), df, by = "patid")
-      cat_totals <- df[, .(Total = uniqueN(patid)), by = demog_var]
-      # df_stats <- df[, .(N = uniqueN(patid)), by = c(demog_var, "term")][
-      #   cat_totals,
-      #   on = demog_var
-      # ][
-      #   , pct := sprintf("%.2f", round(N/Total, digit=2))
-      # ]
+      df <- merge(df, pp_groups_data(), by = "patid")
+      df <- merge(df, unique(outcome_df[,.(patid, mltc_group)]), by = "patid")
 
-      df_stats <- df[, .(
-        N_category = uniqueN(patid)  # Count of patients in each category
-      ), by = c(demog_var, "term")]
-      df_stats <- merge(df_stats,
-                        ltc_freq_df()[,.(term, N)],
-                        by = "term")
-      df_stats[, pct := signif(N_category/N, digit = 2)]
-      # Now calculate percentage using N from subst_frequency
-      df_counts <- copy(df_stats)
-      cohort_props <- cat_totals[, .(prop = Total/sum(Total))]
+      df <- df[term %in% ltc_freq_df()[pct_total>0.005, term]]
 
-      chisq_tests <- df_counts[, {
-        obs <- c(N_category)  # Make sure we have a vector
-        if(length(obs) == length(cat_totals[[demog_var]])) {  # Check we have both male and female
-          #exp <- sum(N_category) * cohort_props$prop
-          if(sum(N_category) >= 10) {
-            test <- suppressWarnings(chisq.test(obs, p = cohort_props$prop))
-            pval <- test$p.value
-          } else {
-            pval <- NA_real_
-          }
-        } else {
-          pval <- NA_real_
-        }
-        .(pvalue = pval)
-      }, by=term]
+      # Calculate statistics
+      cat_totals <- calculate_category_totals(df, demog_var)
+      df_stats <- calculate_demographic_stats(df, demog_var, ltc_freq_df(), "term")
 
-      chisq_tests[, padj := p.adjust(pvalue, method="bonferroni")]
+      # Perform chi-square tests
+      chisq_tests <- perform_chisq_tests(df_stats, cat_totals, demog_var, "term")
+
+      # Format and return results
+      return(format_results(df_stats, chisq_tests, cat_totals, demog_var, ltc_freq_df(), "term"))
+
+    }, rownames = FALSE)
 
 
-      # Format as percentage
-      result <- dcast(df_stats,
-                      term ~ get(demog_var),
-                      value.var = "pct",
-                      fill = 0)
-      result[chisq_tests,`:=`(pvalue = pvalue, padj = i.padj), on="term"]
-      # Rename columns to include totals
-      old_names <- as.character(unique(df_stats[[demog_var]]))
-      new_names <- paste0(old_names, " (", signif(cat_totals$Total/sum(cat_totals$Total), digit = 2), ")")
-      #new_names <- paste0(old_names, " (n=", cat_totals$Total, ")")
+    observe({
+    	prescs <- outcome_prescriptions()
+    	updateSelectizeInput(session = session,
+    											 inputId = "drug_dropdown",
+    											 choices = c("",sort(unique(prescs$substance))),
+    											 options = list(delimiter = "; "),
+    											 server = TRUE)
+    })
 
-      setnames(result,
-               old = old_names,
-               new = new_names)
-      result[!is.na(padj), pvalue := sprintf("%.3f", pvalue)]
-      result[!is.na(padj), padj := sprintf("%.3f", padj)]
-      result <- merge(result, ltc_freq_df()[,.(term, N, pct_total)])
-      result[order(-N)]
+    observeEvent(input$paste_substances, {
+    	req(outcome_prescriptions())
+    	if(input$paste_substances != "") {
+    		prescs <- outcome_prescriptions()
+    		pasted_items <- trimws(strsplit(input$paste_substances, ";")[[1]])
+    		# Filter to only items that exist in your choices
+    		valid_items <- pasted_items[pasted_items %in% sort(unique(prescs$substance))]
+
+    		updateSelectizeInput(session, "drug_dropdown", selected = valid_items)
+    		updateTextInput(session, "paste_substances", value = "") # Clear the text input
+    	}
+    })
+
+    age_filtered_prescriptions <- reactive({
+    	outcome_prescriptions()[outcome_age <= input$outcome_age_filter*365.25]
+    })
+
+    output$selected_pats <- renderText({
+    	dt <- age_filtered_prescriptions()
+    	paste0("Patients within age range: ", prettyNum(uniqueN(dt$patid), big.mark = ","))
+    })
+
+    output$ltc_by_presc <- renderDataTable({
+    	req(input$drug_dropdown)
+    	input$drug_dropdown
+    	ltcs <- valid_ltcs()
+    	prescriptions <- age_filtered_prescriptions()
+    	ltcs <- ltcs[patid %in% prescriptions$patid]
+
+    	# Patients taking the selected drug
+    	patids <- unique(prescriptions[substance %in% input$drug_dropdown, patid])
+
+    	# Patients WITH the drug
+    	ltc_freq <- ltcs[patid %in% patids,
+    									 list(N_with = uniqueN(patid),
+    									 		 Prevalence = round(100*(uniqueN(patid)/length(patids)), digits=2)),
+    									 term]
+
+    	# Patients WITHOUT the drug
+    	unselected_patids <- ltcs[!patid %in% patids, uniqueN(patid)]
+    	not_selected_freq <- ltcs[!patid %in% patids,
+    														list(N_without = uniqueN(patid),
+    																 Prevalence_Unselected = round(100*(uniqueN(patid)/unselected_patids), digits=2)),
+    														term]
+
+    	result <- merge(ltc_freq, not_selected_freq)
+
+    	result <- result[Prevalence >= 0.01]
+
+    	result[, `:=`(
+    		total_with_disease = length(patids),
+    		total_without_disease = unselected_patids,
+    		Prevalence_Ratio = round(Prevalence / Prevalence_Unselected, digits = 2)
+    	)]
+
+    	result[is.infinite(Prevalence_Ratio), Prevalence_Ratio := 0]
+
+    	# Calculate 95% CI for the ratio using log method
+    	result[, `:=`(
+    		p1 = N_with / total_with_disease,
+    		p2 = N_without / total_without_disease
+    	)]
+
+    	result[, `:=`(
+    		log_ratio = log(Prevalence_Ratio),
+    		se_log_ratio = sqrt((1/N_with) - (1/total_with_disease) +
+    													(1/N_without) - (1/total_without_disease))
+    	)]
+
+    	result[, `:=`(
+    		CI_lower = round(exp(log_ratio - 1.96 * se_log_ratio), digits = 2),
+    		CI_upper = round(exp(log_ratio + 1.96 * se_log_ratio), digits = 2)
+    	)]
+
+    	result[,
+    				 CI_95 := paste0("(", CI_lower, " - ", CI_upper, ")")
+    	]
+
+    	# Clean up intermediate columns if desired
+    	result[(CI_lower > 1.0 | CI_upper < 1.0), term := paste0(term, "*")]
+    	result[, c("p1", "p2", "log_ratio", "se_log_ratio", "CI_lower", "CI_upper") := NULL]
+
+    	result[order(-Prevalence_Ratio), .(term, Prevalence, Prevalence_Unselected, Prevalence_Ratio, CI_95)]
     }, rownames = FALSE)
 
     # output$ltc_network <- renderVisNetwork({
@@ -115,9 +191,27 @@ module_ltc_explorer_server <- function(id, outcome_prescriptions, ltc_data, pati
     #   # browser()
     #   # df <- merge(ltcs, ltc_chapters, by.x = "term", by.y = "ltc")
     #   # df[,term := body_system]
-    #   network_dt <- calculate_disease_network(ltcs, filter_method = "prevalence")
-    #   g <- create_igraph_network(network_dt[above_threshold==TRUE])
-    #   network_vis <- prepare_visnetwork(g)
+    #   connection_data <- calculate_network(ltcs, "term", min_prevalence = 0.05, min_co_prevalence = 0.05)
+    #   network <- create_network_visualization(connection_data, or_range = c(1,50))
+    #   network |>
+    #   	visNodes(font = list(
+    #   		size = 16,
+    #   		face = "arial",
+    #   		background = "rgba(255, 255, 255, 0.8)",
+    #   		strokeWidth = 0,
+    #   		align = "center"
+    #   	),
+    #   	color = list(background = "#e1e1e1", border = "#e1e1e1"),
+    #   	shadow = list(enabled = TRUE, size = 2)) |>
+    #   	visEdges(smooth = FALSE,
+    #   					 scaling = list(
+    #   					 	min = 2,
+    #   					 	max = 8
+    #   					 ),
+    #   					 hoverWidth = 2,
+    #   					 color = list(inherit = "both")) |>
+    #   	visOptions(highlightNearest = list(enabled = TRUE, algorithm = "all", degree = list(from = 0, to = 1))) |>
+    #   	visIgraphLayout()
     # })
   })
 }
