@@ -19,27 +19,6 @@ library(bsicons)
 
 set.seed(42)
 
-# Load data.tables
-gold_patient <- fread("../data/gold_cp_patient.csv")
-gold_ltc <- fread("../data/gold_ltc.csv")
-gold_cp <- fread("../data/gold_cp.csv")
-gold_outcomes <- fread("../data/gold_outcomes.csv")
-# setorder(gold_outcomes,patid,outcome,eventdate)
-# gold_outcomes <- gold_outcomes[,.SD[1],.(patid,outcome)]
-gold_acute_presc <- fread("../data/gold_acute_presc.csv") #, nrows=2)
-
-# Set keys for optimal performance
-setkey(gold_patient, patid)
-setkey(gold_ltc, patid, term)
-setkey(gold_cp, patid, substance)
-setkey(gold_outcomes, patid, outcome, eventdate)
-setkey(gold_acute_presc, patid)
-
-
-gold_patient <- gold_patient[!is.na(imd_quintile)]
-valid_pats <- gold_patient$patid
-gold_cp <- gold_cp[patid %in% valid_pats]
-gold_ltc <- gold_ltc[patid %in% valid_pats]
 
 # Convert date columns to proper format
 #gold_ltc[, eventdate := as.IDate(eventdate)]
@@ -56,8 +35,7 @@ gold_ltc <- gold_ltc[patid %in% valid_pats]
 #gold_cp[, patid := bit64::as.integer64(patid)]
 #gold_outcomes[, patid := bit64::as.integer64(patid)]
 #gold_acute_presc[, patid := bit64::as.integer64(patid)]
-chapter_menu_data <- fread("chapters.tsv")
-bnf_lookup <- fread("new_bnf_lkp.csv")
+
 
 #' @export
 ui <-
@@ -133,12 +111,11 @@ server <- function(input, output, session) {
 	# From module: patientFilter_r
 	# To module: patient numbers and list out of outcomes
 	left_card_server(
-		"patient_filter_module",
-		chapter_menu_data,
-		patientFilter_r,
-		selected_patient_number,
-		total_patient_number,
-		outcome_list
+		id = "patient_filter_module",
+		patientFilter_r = patientFilter_r,
+		selected_patient_number = selected_patient_number,
+		total_patient_number = total_patient_number,
+		outcome_list = outcome_list
 	)
 
 	patient_data <- reactive({
@@ -253,7 +230,7 @@ server <- function(input, output, session) {
 		patientFilter_r$outcome
 	)
 
-	right_card_inputs <- right_card_server(id = "drug_filter_module", bnf_lookup)
+	right_card_inputs <- right_card_server(id = "drug_filter_module")
 	filtered_prescription_data <- reactive({
 		req(prescription_data())
 		filtered_substances <-
@@ -294,22 +271,17 @@ server <- function(input, output, session) {
 	)
 
 	# Middle module
-	middle_selected_tab <- middle_card_server(id = "polyph_module",
-										 NULL,
-										 filtered_prescription_data,
-										 ltc_data,
-										 patient_data,
-										 outcome_data,
-										 bnf_lookup,
-										 chapter_menu_data,
-										 patientFilter_r$input_list$min_nltc,
-										 stored_queries,
-										 right_card_inputs$polypharmacy_threshold,
-										 right_card_inputs$earliest_treatment_end,
-										 gold_acute_presc,
-										 gold_patient,
-										 gold_ltc,
-										 gold_cp)
+	middle_selected_tab <- middle_card_server(
+		id = "polyph_module",
+		filtered_prescription_data = filtered_prescription_data,
+		ltc_data = ltc_data,
+		patient_data = patient_data,
+		outcome_data = outcome_data,
+		min_nltc = patientFilter_r$input_list$min_nltc,
+		stored_queries = stored_queries,
+		polypharmacy_threshold = right_card_inputs$polypharmacy_threshold,
+		earliest_treatment_end = right_card_inputs$earliest_treatment_end
+	)
 
 	observe({
 		req(middle_selected_tab$seltab())

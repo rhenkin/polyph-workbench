@@ -19,7 +19,7 @@ module_presc_tto_ui <- function(id) {
   # )
 }
 
-module_presc_tto_server <- function(id, subst_pp_df, subst_freq, patient_data) {
+module_presc_tto_server <- function(id, subst_pp_df, subst_freq) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -27,27 +27,7 @@ module_presc_tto_server <- function(id, subst_pp_df, subst_freq, patient_data) {
     	df[,list(tto = eventdate - start_date)]
     }
 
-    calculate_analysis_data <- function(df) {
-    	# subset_df <- df[,.SD[which.max(.SD$start_date)] , patid]
-    	# subset_df <- subset_df[,.(tto=eventdate-start_date),substance]
-    	# subset_df[, `:=`(
-    	# 	within_1m = tto <= 30,
-    	# 	within_3m = 30 < tto & tto <= 90,
-    	# 	within_6m = 90 < tto & tto <= 180,
-    	# 	within_1y = 180 < tto & tto <= 365,
-    	# 	after_1y = tto > 365
-    	# )]
-    	#
-    	# drug_analysis <- subset_df[, .(
-    	# 	N = .N,
-    	# 	`< 30d` = round(sum(within_1m, na.rm = TRUE) / .N * 100, digits = 2),
-    	# 	`< 3m` = round(sum(within_3m, na.rm = TRUE) / .N * 100, digits = 2),
-    	# 	`< 6m` = round(sum(within_6m, na.rm = TRUE) / .N * 100, digits = 2),
-    	# 	`< 1y` = round(sum(within_1y, na.rm = TRUE) / .N * 100, digits = 2),
-    	# 	`1+y` = round(sum(after_1y, na.rm = TRUE) / .N * 100, digits = 2),
-    	# 	`Median TTO` = as.double(median(tto, na.rm = TRUE)),
-    	# 	`Mean TTO` = round(as.double(mean(tto, na.rm = TRUE)), digits = 2)
-    	# ), by = substance]
+    calculate_analysis_data <- function(df) {    	
 
     	drug_analysis <- df[df[, .I[which.max(start_date)], by = patid]$V1][
     		, `:=`(tto = eventdate - start_date)][
@@ -98,29 +78,6 @@ module_presc_tto_server <- function(id, subst_pp_df, subst_freq, patient_data) {
     	calculate_analysis_data(subset_df)
 
     }, rownames = FALSE)
-
-    # observe({
-    #   req(subst_pp_df())
-    #   updateSelectizeInput(
-    #     session,
-    #     "select_substance",
-    #     choices = sort(unique(subst_pp_df()$BNF_Chemical_Substance)),
-    #     selected = character(0),
-    #     server = TRUE
-    #   )
-    # })
-
-    # selected_subst_df <- reactive({
-    #   req(input$select_substance)
-    #   browser()
-    #   subst_pp_df()[BNF_Chemical_Substance==input$select_substance]
-    # })
-    # observe({
-    #   req(input$select_substance)
-    #   browser()
-    #   df[order(patid,-start_date)][, .SD[1], by = patid][,mean(duration),BNF_Chemical_Substance][order(-V1)]
-    #
-    # })
 
   })
 }

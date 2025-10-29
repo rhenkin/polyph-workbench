@@ -106,7 +106,7 @@ right_card_ui <- function(id) {
   )
 }
 
-right_card_server <- function(id, bnf_lookup) {
+right_card_server <- function(id) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
@@ -128,16 +128,7 @@ right_card_server <- function(id, bnf_lookup) {
 
     # Reactive values to store included and excluded BNFs
     included_bnfs <- reactiveVal(list())
-    excluded_bnfs <- reactiveVal(list(
-    	list(category = "Chapter", value = "Anaesthesia"),
-    	list(category = "Chapter", value = "Appliances"),
-    	list(category = "Chapter", value = "Dressings"),
-    	#list(category = "Chapter", value = "Ear, Nose And Oropharynx"),
-    	list(category = "Chapter", value = "Immunological Products & Vaccines"),
-    	list(category = "Chapter", value = "Incontinence Appliances"),
-    	list(category = "Chapter", value = "Other Drugs And Preparations"),
-    	list(category = "Chapter", value = "Stoma Appliances")
-    ))
+    excluded_bnfs <- reactiveVal(default_excluded_bnf)
 
     # Update Chapter choices on initialization
     observe({
@@ -288,7 +279,7 @@ right_card_server <- function(id, bnf_lookup) {
       }
     })
 
-    bnf_table_server("bnf_table_module", bnf_lookup)
+    bnf_table_server(id = "bnf_table_module", bnf_lookup = bnf_lookup)
 
     # Return both reactive values
     return(list(

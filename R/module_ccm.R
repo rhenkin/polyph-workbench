@@ -1,4 +1,4 @@
-module_psm_ui <- function(id) {
+module_ccm_ui <- function(id) {
 	ns <- NS(id)
 	nav_panel("Case-control Matching",
 						fluidRow(
@@ -9,9 +9,7 @@ module_psm_ui <- function(id) {
 										 numericInput(ns("match_ratio"), "Control:Case ratio:",
 										 						 value = 4, min = 1, max = 10, step = 1),
 										 div("Risk-set matching using sex, binned age at prescription and binned time since multimorbidity"),
-										 actionButton(ns("create_cohort"), "Create matched cohort", class = "btn-primary")
-										 # br(), br(),
-										 # verbatimTextOutput(ns("cohort_summary"))
+										 actionButton(ns("create_cohort"), "Create matched cohort", class = "btn-primary")										 
 							),
 							column(6,
 										 actionButton(ns("save_study"), "Save study", class = "btn-success"),
@@ -58,13 +56,10 @@ module_psm_ui <- function(id) {
 	)
 }
 
-module_psm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
-															gold_patient, gold_ltc, gold_cp, gold_acute_presc,
+module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,															
 															study_dir = "studies") {
 	moduleServer(id, function(input, output, session) {
 		ns <- session$ns
-
-		chapters <- fread("chapters.tsv")
 
 		# Load master risk pool once when module is activated
 		master_risk_pool_dataset <- reactive({
@@ -131,7 +126,7 @@ module_psm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 				setkey(valid_ltcs, patid, eventdate)
 				valid_ltc_patids <- valid_ltcs[, .N, patid][N >= 2, patid]
 
-				valid_ltcs <- valid_ltcs[chapters, on = .(term = ltc), nomatch = 0]
+				valid_ltcs <- valid_ltcs[ltc_chapters, on = .(term = ltc), nomatch = 0]
 				setorder(valid_ltcs, patid, eventdate)
 				valid_ltcs[, ltc_index := 1:.N, patid]
 

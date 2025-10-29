@@ -22,13 +22,13 @@ left_card_ui <- function(id) {
 }
 
 #' @export
-left_card_server <- function(id, chapter_menu_data, patientFilter_r, selected_patient_number, total_patient_number, outcome_list) {
+left_card_server <- function(id, patientFilter_r, selected_patient_number, total_patient_number, outcome_list) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     updateSelectizeInput(session, "select_outcome", choices = outcome_list)
 
     output$chapter_table <- renderDataTable({
-      datatable(chapter_menu_data,class = list(stripe = FALSE),
+      datatable(ltc_chapters,class = list(stripe = FALSE),
     , rownames = FALSE,
     options = list(
       order = list(list(1, 'asc')),
@@ -45,7 +45,7 @@ left_card_server <- function(id, chapter_menu_data, patientFilter_r, selected_pa
     observeEvent(input$trigger_update,
                  {
                    selected_ltc_rowids <- input$chapter_table_rows_selected
-                   selected_ltcs <- chapter_menu_data[selected_ltc_rowids,]$ltc
+                   selected_ltcs <- ltc_chapters[selected_ltc_rowids,]$ltc
                    patientFilter_r$outcome <- input$select_outcome
                    patientFilter_r$selected_ltcs <- selected_ltcs
                    patientFilter_r$input_list <- list("min_nltc" = input$nltc_checkbox,

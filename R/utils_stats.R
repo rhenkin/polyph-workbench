@@ -16,50 +16,6 @@ perform_chisq_tests <- function(df_counts, cat_totals, demog_var, condition_col)
 	return(chisq_tests)
 }
 
-# Create single function for one drug pair
-calc_single_or <- function(drug1_name, drug2_name, drug_data) {
-	tab <- table(drug_data[[drug1_name]], drug_data[[drug2_name]])
-	if(all(dim(tab) == 2) && all(tab > 0)) {
-		test <- fisher.test(tab)
-		return(c(or = test$estimate,
-						 ci_lower = test$conf.int[1],
-						 ci_upper = test$conf.int[2]))
-	} else {
-		return(c(or = NA, ci_lower = NA, ci_upper = NA))
-	}
-}
-
-
-calc_or_fast <- function(drug1, drug2, drug_data) {
-	tab <-  table(drug_data[[drug1]], drug_data[[drug2]])
-
-	if(all(dim(tab) == 2) && all(tab > 0)) {
-		# Manual OR calculation
-		a <- tab[2,2]  # both drugs
-		b <- tab[2,1]  # drug1 only
-		c <- tab[1,2]  # drug2 only
-		d <- tab[1,1]  # neither drug
-
-		or <- (a * d) / (b * c)
-
-		# Manual 95% CI calculation (Woolf method)
-		log_or <- log(or)
-		se_log_or <- sqrt(1/a + 1/b + 1/c + 1/d)
-
-		ci_lower <- exp(log_or - 1.96 * se_log_or)
-		ci_upper <- exp(log_or + 1.96 * se_log_or)
-
-		return(c(or = or, ci_lower = ci_lower, ci_upper = ci_upper))
-	}
-
-	return(c(or = NA, ci_lower = NA, ci_upper = NA))
-}
-
-
-# Vectorize it
-calc_or_vec <- Vectorize(calc_or_fast, vectorize.args = c("drug1", "drug2"))
-
-
 calc_all_ors_vectorized <- function(drug_matrix) {
 	n_drugs <- ncol(drug_matrix)
 	n_patients <- nrow(drug_matrix)
