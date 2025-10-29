@@ -1,15 +1,13 @@
 #' @export
 middle_card_ui <- function(id) {
   ns <- NS(id)
-  navset_pill(
-  	nav_panel("Polypharmacy viewer",
+  navset_pill(id = ns("middle_tab"),
+  	nav_panel("Outcome explorer",value = "outcome_explorer",
   	card(
          fillable = FALSE,
-         #selectizeInput(ns("select_ltc_outcome"), "Select outcome:", choices = NULL, options = list(dropdownParent = "body")),
          div(style="min-height: 2rem",
-         		fluidRow(
-         			column(8, textOutput(ns("npats_outcome_prescriptions"))),
-         			column(4, downloadButton(ns("download_code"), "Export Code")))),
+         		textOutput(ns("npats_outcome_prescriptions"))
+         		),
          module_overview_ui(ns("overview_module")),
          module_outcome_explorer_ui(ns("outcome_explorer_module")),
          module_ltc_explorer_ui(ns("ltc_explorer_module")),
@@ -25,23 +23,6 @@ middle_card_server <- function(id, db_pool, prescription_data, ltc_data, patient
 															 polypharmacy_threshold, earliest_treatment_end, acute_presc_df, gold_patient, gold_ltc, gold_cp) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-
-    output$download_code <- downloadHandler(
-    	filename = function() {
-    		paste0("data_processing_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".R")
-    	},
-    	contentType = "text/r-script",
-    	content = function(file) {
-    		# Use the stored queries directly
-    		export_sql_commands(
-    			stored_queries$prescription,
-    			stored_queries$ltc,
-    			stored_queries$patient,
-    			stored_queries$outcome,
-    			file
-    		)
-    	}
-    )
 
     queried_terms <- reactive({ stored_queries$ltc$terms })
 
@@ -185,7 +166,10 @@ middle_card_server <- function(id, db_pool, prescription_data, ltc_data, patient
     									gold_patient = gold_patient,
     									gold_ltc = gold_ltc,
     									gold_cp = gold_cp,
-    									acute_presc_df
+    									acute_presc_df,
+    									chapter_menu_data
     									)
+
+    return(list(seltab=reactive(input$middle_tab)))
   })
 }

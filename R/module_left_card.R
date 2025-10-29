@@ -3,13 +3,16 @@ left_card_ui <- function(id) {
   ns <- NS(id)
   # card(card_header("Patient filtering"),
   list(
+  		 div("Choose outcome and patient criteria and click \"Start analysis\" to begin"),
        textOutput(ns("selectedPatientInfo")),
-       actionButton(ns("trigger_update"),label = "Update filter"),
+       actionButton(ns("trigger_update"),label = "Start analysis"),
        selectizeInput(ns("select_outcome"), label = "Select an outcome:", choices = NULL),
-       div(dataTableOutput(ns("chapter_table"), height = "300px"), style = "height: 400px"),
+       div("Select one or more conditions to define inclusion criteria:"),
+  		 div(dataTableOutput(ns("chapter_table"), height = "300px"), style = "height: 400px"),
        #checkboxInput(ns("mm_checkbox"), "2 LTCs before outcome?", value = TRUE),
-  		 numericInput(ns("nltc_checkbox"), "Number of LTCs before outcome", value = 2, step = 1, min = 0),
-       checkboxGroupInput(ns("sex_checkbox"), "Sex:", choices = c("Male", "Female"), inline = TRUE),
+  		 numericInput(ns("nltc_checkbox"), "Number of conditions before outcome:", value = 2, step = 1, min = 0),
+       div("Select one or more demographic categories below to define inclusion criteria:"),
+  		 checkboxGroupInput(ns("sex_checkbox"), "Sex:", choices = c("Male", "Female"), inline = TRUE),
        checkboxGroupInput(ns("eth_checkbox"),
                           "Ethnicity:",
                           choices = c("White", "Black or Black British","Chinese or Other Group",
@@ -25,15 +28,15 @@ left_card_server <- function(id, chapter_menu_data, patientFilter_r, selected_pa
     updateSelectizeInput(session, "select_outcome", choices = outcome_list)
 
     output$chapter_table <- renderDataTable({
-      chapter_menu_data
-    }, rownames = FALSE,
+      datatable(chapter_menu_data,class = list(stripe = FALSE),
+    , rownames = FALSE,
     options = list(
       order = list(list(1, 'asc')),
       dom = "<f<t>>",
       info = FALSE,
       paging = FALSE,
       scrollY = "300px"
-    ))
+    )) })
 
     output$selectedPatientInfo <-  renderText({
       paste0("Filtered eligible patients: ", selected_patient_number(), "/", total_patient_number)

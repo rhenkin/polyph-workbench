@@ -9,9 +9,9 @@ module_psm_ui <- function(id) {
 										 numericInput(ns("match_ratio"), "Control:Case ratio:",
 										 						 value = 4, min = 1, max = 10, step = 1),
 										 div("Risk-set matching using sex, binned age at prescription and binned time since multimorbidity"),
-										 actionButton(ns("create_cohort"), "Create matched cohort", class = "btn-primary"),
-										 br(), br(),
-										 verbatimTextOutput(ns("cohort_summary"))
+										 actionButton(ns("create_cohort"), "Create matched cohort", class = "btn-primary")
+										 # br(), br(),
+										 # verbatimTextOutput(ns("cohort_summary"))
 							),
 							column(6,
 										 actionButton(ns("save_study"), "Save study", class = "btn-success"),
@@ -20,11 +20,40 @@ module_psm_ui <- function(id) {
 							)
 						),
 						br(),
-						card(
-							card_header("Matching Quality Summary"),
+						conditionalPanel(
+							condition = "output.show_results == true",ns = ns,
+							card(
+							card_header("Matching Results"),
 							card_body(
-								verbatimTextOutput(ns("quality_summary"))
+								layout_columns(col_widths = c(2,3,4,4),
+									verticalLayout(
+										value_box(
+											showcase_layout = showcase_left_center(width = "200px", max_height = "150px"),
+											height = "150px",
+											title = "Cases",
+											value = textOutput(ns("vb_cases_n")),
+											theme = "red",
+											showcase = bs_icon("people-fill")
+										),
+										value_box(
+											showcase_layout = showcase_left_center(width = "200px", max_height = "150px"),
+											height = "150px",
+											title = "Controls",
+											value = textOutput(ns("vb_controls_n")),
+											theme = "blue",
+											showcase = bs_icon("people-fill")
+										)
+									),
+									card(
+										card_header("Summary"),
+										card_body(
+											vegawidgetOutput(ns("matched_age_dist")),
+											vegawidgetOutput(ns("matched_time_dist"))
+										)
+									)
+								)
 							)
+						)
 						)
 	)
 }
@@ -49,7 +78,6 @@ module_psm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 		cases_r <- reactiveVal(NULL)
 		controls_r <- reactiveVal(NULL)
 		match_summary_r <- reactiveVal(NULL)
-
 		# Main workflow: Create matched cohort
 		observeEvent(input$create_cohort, {
 			req(input$study_name)
@@ -73,7 +101,7 @@ module_psm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 				cases_raw <- mrp_dataset %>%
 					dplyr::filter(patid %in% case_patids) %>%
 					dplyr::select(patid, prescription_date, substance, stratum_alt, stratum_mm_time, n_ltcs,
-												concurrent_cps, age_at_rx, sex, imd_quintile) %>%
+												concurrent_cps, age_at_rx, sex, imd_quintile, first_presc_bin, time_since_first_presc) %>%
 					dplyr::collect() %>%
 					as.data.table()
 
@@ -158,7 +186,7 @@ module_psm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 				eligible_pool <- mrp_dataset %>%
 					dplyr::filter(stratum_alt %in% strata_needs) %>%
 					dplyr::select(patid, prescription_date, substance, sex, age_at_rx, n_ltcs,
-								 imd_quintile, age_bin, stratum_alt, year) %>%
+								 imd_quintile, age_bin, stratum_alt, year, first_presc_bin, time_since_first_presc) %>%
 					dplyr::collect() %>%
 					as.data.table()
 
@@ -224,6 +252,9 @@ module_psm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 
 				match_summary_r(match_summary)
 
+				output$show_results <- reactive({ TRUE })
+				outputOptions(output, "show_results", suspendWhenHidden = FALSE)
+
 				progress$set(value = 1)
 				showNotification("Matched cohort created successfully!", type = "message", duration = 3)
 
@@ -233,6 +264,158 @@ module_psm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 				print(traceback())
 			})
 		})
+
+
+		observe({
+			req(cases_r(), controls_r())
+
+			cases <- cases_r()
+			controls <- controls_r()
+
+			output$vb_cases_n <- renderText({
+				prettyNum(uniqueN(cases$patid), big.mark = ",")
+			})
+
+			output$vb_controls_n <- renderText({
+				prettyNum(uniqueN(controls$patid), big.mark = ",")
+			})
+
+
+			output$matched_age_dist <- renderVegawidget({
+
+				summary_cases <- round(summary(cases$index_age), digits = 2)
+				summary_controls <- round(summary(controls$age_at_rx), digits = 2)
+
+				df <- rbind(
+					as.data.table(as.list(summary_cases))[, group := "Cases"],
+					as.data.table(as.list(summary_controls))[, group := "Controls"]
+				)
+				colnames(df) <- c("lower", "q1", "median", "mean", "q3", "upper", "group")
+
+				spec <- list(
+					`$schema` = vega_schema(),
+					title = "Age at prescription",
+					height = 160,
+					# width = width,
+					data = list(values = df),
+					encoding = list(
+						y = list(field = "group", type = "nominal", title = NULL)
+					),
+					layer = list(
+						list(
+							mark = list(type = "rule"),
+							encoding = list(
+								x = list(
+									field = "lower",
+									type = "quantitative",
+									scale = list(zero = FALSE),
+									title = NULL
+								),
+								x2 = list(field = "upper")
+							)
+						),
+						list(
+							mark = list(type = "bar", size = 36),
+							encoding = list(
+								x = list(field = "q1", type = "quantitative"),
+								x2 = list(field = "q3"),
+								color = list(field = "group", type = "nominal", legend = NULL,
+														 scale = list(range = list("#e74c3c", "#2C3E50")))
+							)
+						),
+						list(
+							mark = list(type = "tick", color = "white", size = 36),
+							encoding = list(
+								x = list(field = "median", type = "quantitative")
+							)
+						),
+						list(
+							mark = list(type = "text", dy = -25, align = "center"),
+							encoding = list(
+								x = list(field = "median", type = "quantitative"),
+								text = list(field = "median"),
+								color = list(value = "black")
+							)
+						)
+					),
+					config = list(
+						view = list(stroke = NULL),
+						font = "Lato, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\""
+					)
+				)
+				spec |> as_vegaspec()
+
+			})
+
+			output$matched_time_dist <- renderVegawidget({
+
+				summary_cases <- round(summary(cases$time_since_first_presc/365.25), digits = 2)
+				summary_controls <- round(summary(controls$time_since_first_presc/365.25), digits = 2)
+
+				df <- rbind(
+					as.data.table(as.list(summary_cases))[, group := "Cases"],
+					as.data.table(as.list(summary_controls))[, group := "Controls"]
+				)
+				colnames(df) <- c("lower", "q1", "median", "mean", "q3", "upper", "group")
+
+				spec <- list(
+					`$schema` = vega_schema(),
+					title = "Time since first prescription",
+					height = 160,
+					# width = width,
+					data = list(values = df),
+					encoding = list(
+						y = list(field = "group", type = "nominal", title = NULL)
+					),
+					layer = list(
+						list(
+							mark = list(type = "rule"),
+							encoding = list(
+								x = list(
+									field = "lower",
+									type = "quantitative",
+									scale = list(zero = FALSE),
+									title = NULL
+								),
+								x2 = list(field = "upper")
+							)
+						),
+						list(
+							mark = list(type = "bar", size = 36),
+							encoding = list(
+								x = list(field = "q1", type = "quantitative"),
+								x2 = list(field = "q3"),
+								color = list(field = "group", type = "nominal", legend = NULL,
+														 scale = list(range = list("#e74c3c", "#2C3E50")))
+							)
+						),
+						list(
+							mark = list(type = "tick", color = "white", size = 36),
+							encoding = list(
+								x = list(field = "median", type = "quantitative")
+							)
+						),
+						list(
+							mark = list(type = "text", dy = -25, align = "center"),
+							encoding = list(
+								x = list(field = "median", type = "quantitative"),
+								text = list(field = "median"),
+								color = list(value = "black")
+							)
+						)
+					),
+					config = list(
+						view = list(stroke = NULL),
+						font = "Lato, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\""
+					)
+				)
+				spec |> as_vegaspec()
+
+			})
+
+
+		})
+
 
 		# Display cohort summary
 		output$cohort_summary <- renderPrint({

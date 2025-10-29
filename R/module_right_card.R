@@ -2,6 +2,7 @@ right_card_ui <- function(id) {
   ns <- NS(id)
   # card(card_header("Drug filtering"),
   list(
+  	div("Prescription filters can be defined before or after starting an analysis."),
        tagList(
          tags$style(HTML(sprintf("
       #%s .excluded-item, #%s .included-item {
