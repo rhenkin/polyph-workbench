@@ -21,12 +21,12 @@ set.seed(42)
 
 # Load data.tables
 gold_patient <- fread("../data/gold_cp_patient.csv")
-gold_ltc <- fread("../data/gold_ltc.csv", nThread = 4)
-gold_cp <- fread("../data/gold_cp.csv", nThread = 4)
+gold_ltc <- fread("../data/gold_ltc.csv")
+gold_cp <- fread("../data/gold_cp.csv")
 gold_outcomes <- fread("../data/gold_outcomes.csv")
 # setorder(gold_outcomes,patid,outcome,eventdate)
 # gold_outcomes <- gold_outcomes[,.SD[1],.(patid,outcome)]
-gold_acute_presc <- fread("../gold_acute_presc.csv", nThread = 4) #, nrows=2)
+gold_acute_presc <- fread("../data/gold_acute_presc.csv") #, nrows=2)
 
 # Set keys for optimal performance
 setkey(gold_patient, patid)
