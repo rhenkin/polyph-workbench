@@ -46,9 +46,7 @@ module_overview_ui <- function(id) {
 			accordion_panel(
 				title = "Time-to-outcome versus PP burden from last prescription",
 				value = "pptime",
-				#div("Time measured in days"),
-				vegawidgetOutput(ns("tto_curve")),
-				#dataTableOutput(ns("pp_cor_table"))
+				vegawidgetOutput(ns("tto_curve"))
 			)
 		)
 	)
@@ -171,65 +169,11 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 		})
 
 		# 7. Demographic distribution tables
-		pp_frequencies <- function(dt, group_var) {
-			# Get all possible pp values
-			all_pp <- seq_len(max(dt$pp))
-
-			# Create the frequency table with zeros for missing combinations
-			freq_table <- dt[, as.list(table(factor(pp, levels=all_pp))), by=group_var]
-
-			# Convert to the string format you want
-			result <- freq_table[, list(
-				pp_label = paste0(all_pp, collapse=","),
-				pp_values = paste0(unlist(.SD), collapse=",")
-			), by = group_var]
-			return(result)
-		}
-
 		output$demodist_table <- render_gt({
 			pp_df <- pp_demog_table()
-			total_patids <- length(unique(pp_df$patid))
+			to_print <- prepare_cohort_demog_data(pp_df)
 
-			sex_df <- pp_df[, .N, sex]
-			sex_df[, group := "Sex"]
-			sex_df[, pct_total := signif(N/total_patids, digits = 2)]
-
-			sex_df <- merge(sex_df, pp_frequencies(pp_df, "sex"), by = "sex")
-			eth_df <- pp_df[, .N, eth_group]
-			eth_df[, group := "Ethnic group"]
-			eth_df[, pct_total := signif(N/total_patids, digits = 2)]
-			eth_df <- merge(eth_df, pp_frequencies(pp_df, "eth_group"), by = "eth_group")
-
-			imd_df <- pp_df[, .N, imd_quintile]
-			imd_df[, group := "IMD Quintile"]
-			imd_df[, pct_total := signif(N/total_patids, digits = 2)]
-			imd_df <- merge(imd_df, pp_frequencies(pp_df, "imd_quintile"), by = "imd_quintile")
-			setorder(imd_df, imd_quintile)
-
-			age_df <- pp_df[, .N, age_group]
-			age_df[, group := "Age at outcome"]
-			age_df[, pct_total := signif(N/total_patids, digits = 2)]
-			age_df <- merge(age_df, pp_frequencies(pp_df, "age_group"), by = "age_group")
-			setorder(age_df, age_group)
-
-			mltc_df <- pp_df[, .N, mltc_group]
-			mltc_df[, group := "# LTCs"]
-			mltc_df[, pct_total := signif(N/total_patids, digits = 2)]
-			mltc_df <- merge(mltc_df, pp_frequencies(pp_df, "mltc_group"), by = "mltc_group")
-
-			to_print <-
-				rbindlist(
-					list(
-						sex_df,
-						eth_df,
-						imd_df,
-						age_df,
-						mltc_df
-					),
-					use.names = FALSE)
-			colnames(to_print) <- c("Category", "N", "group", "%", "pp_labels", "pp_values")
-
-			gt(to_print,row_group_as_column = TRUE, groupname_col = "group") |>
+			gt(to_print, row_group_as_column = TRUE, groupname_col = "group") |>
 				tab_style(
 					style = list(
 						weight = "bold"
@@ -285,18 +229,7 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 			summary_stats <- results[order(pp), c(.N,as.list(quantile(time_to_outcome, c(0.25,0.5,0.75)))), pp]
 			colnames(summary_stats) <- c("pp", "N", "iqr1", "median", "iqr2")
 
-			tto_line_plot(summary_stats) |> as_vegaspec()
-			# summary_stats <- results[, .(
-			# 	n = .N,
-			# 	mean_time = round(mean(time_to_outcome, na.rm = TRUE), digits = 2),
-			# 	median_time = round(median(time_to_outcome, na.rm = TRUE, digits = 2)),
-			# 	sd_time = round(sd(time_to_outcome, na.rm = TRUE), digits = 2),
-			# 	min_time = min(time_to_outcome, na.rm = TRUE),
-			# 	max_time = max(time_to_outcome, na.rm = TRUE)
-			# ), by = pp]
-			# setorder(summary_stats, pp)
-			# browser()
-			# summary_stats
+			tto_line_plot(summary_stats) |> as_vegaspec()		
 		})
 
 	})
