@@ -1,10 +1,14 @@
-save_matched_datasets <- function(study_name, cases, controls, gold_patient, gold_cp, gold_ltc,
-																	outcome_prescriptions, study_dir = "studies") {
-	# Create directory if it doesn't exist
-	if (!dir.exists(study_dir)) {
-		dir.create(study_dir, recursive = TRUE)
-	}
-
+#' Prepare study data structure from matching results (without saving)
+#' @param study_name character string
+#' @param cases data.table with case information
+#' @param controls data.table with control information
+#' @param gold_patient data.table with patient demographic data
+#' @param gold_cp data.table with prescription data
+#' @param gold_ltc data.table with long-term condition data
+#' @param outcome_prescriptions data.table with outcome prescription data
+#' @return list with all study data components
+prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_cp, gold_ltc,
+																outcome_prescriptions) {
 	# Validate inputs
 	if (!all(c("patid", "outcome_date") %in% colnames(cases))) {
 		stop("cases must have columns: patid, index_date, outcome_date")
@@ -18,9 +22,9 @@ save_matched_datasets <- function(study_name, cases, controls, gold_patient, gol
 	control_patids <- unique(controls$patid)
 
 	n_cases <- length(case_patids)
-	n_controls <- uniqueN(controls$patid)  # Use uniqueN since controls can be sampled with replacement
+	n_controls <- uniqueN(controls$patid)
 
-	message(sprintf("Saving study: %d cases, %d unique controls (%d total control observations)",
+	message(sprintf("Preparing study data: %d cases, %d unique controls (%d total control observations)",
 									n_cases, n_controls, nrow(controls)))
 
 	# ========================================================================
@@ -33,7 +37,6 @@ save_matched_datasets <- function(study_name, cases, controls, gold_patient, gol
 	cases_presc[, treatment := 1]
 
 	# Controls: get prescriptions active at their index date
-	# Create control index date lookup
 	control_index_lookup <- unique(controls[, .(patid, index_date = control_index_date)])
 
 	# Get all CP prescriptions for controls that were active at index date
@@ -47,7 +50,7 @@ save_matched_datasets <- function(study_name, cases, controls, gold_patient, gol
 
 	# Create structure matching outcome_prescriptions
 	controls_presc[, `:=`(
-		eventdate = index_date,  # Control's "outcome date" is their index date
+		eventdate = index_date,
 		outcome_age = as.numeric(as.IDate(index_date) - as.IDate(dob)),
 		treatment = 0
 	)]
@@ -142,7 +145,7 @@ save_matched_datasets <- function(study_name, cases, controls, gold_patient, gol
 	)
 
 	# ========================================================================
-	# Save everything
+	# Prepare final structure
 	# ========================================================================
 	colnames(all_patient_data)[3] <- "sex"
 	study_data <- list(
@@ -155,13 +158,37 @@ save_matched_datasets <- function(study_name, cases, controls, gold_patient, gol
 		metadata = metadata
 	)
 
+	message(sprintf("Study data prepared - Cases: %d, Unique controls: %d (Total: %d)",
+									n_cases, n_controls, nrow(controls)))
+
+	return(study_data)
+}
+
+save_matched_datasets <- function(study_name, cases, controls, gold_patient, gold_cp, gold_ltc,
+																	outcome_prescriptions, study_dir = "studies") {
+	# Create directory if it doesn't exist
+	if (!dir.exists(study_dir)) {
+		dir.create(study_dir, recursive = TRUE)
+	}
+
+	# Prepare the study data using the helper function
+	study_data <- prepare_study_data(
+		study_name = study_name,
+		cases = cases,
+		controls = controls,
+		gold_patient = gold_patient,
+		gold_cp = gold_cp,
+		gold_ltc = gold_ltc,
+		outcome_prescriptions = outcome_prescriptions
+	)
+
+	# Save to disk
 	saveRDS(study_data, file.path(study_dir, paste0(study_name, "_study_data.rds")))
 
 	message("Study '", study_name, "' saved successfully to ", study_dir)
-	message(sprintf("Final dataset - Cases: %d, Unique controls: %d (Total: %d)",
-									n_cases, n_controls, nrow(controls)))
 	message(sprintf("Matching ratio - Unique: %.2f:1, Total: %.2f:1",
-									n_controls / n_cases, nrow(controls) / n_cases))
+									study_data$metadata$matching_ratio_unique,
+									study_data$metadata$matching_ratio_total))
 
 	invisible(study_data)
 }

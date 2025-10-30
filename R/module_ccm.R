@@ -73,6 +73,7 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 		cases_r <- reactiveVal(NULL)
 		controls_r <- reactiveVal(NULL)
 		match_summary_r <- reactiveVal(NULL)
+		prepared_study_data_r <- reactiveVal(NULL)
 		# Main workflow: Create matched cohort
 		observeEvent(input$create_cohort, {
 			req(input$study_name)
@@ -467,6 +468,29 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 			cat(sprintf("\nDuplicate control rate: %.3f%%\n", duplicate_rate * 100))
 		})
 
+		# Prepare study data in memory when matching completes
+		observe({
+			req(cases_r(), controls_r(), input$study_name)
+
+			tryCatch({
+				study_data <- prepare_study_data(
+					study_name = input$study_name,
+					cases = cases_r(),
+					controls = controls_r(),
+					gold_patient = gold_patient,
+					gold_cp = gold_cp,
+					gold_ltc = gold_ltc,
+					outcome_prescriptions = outcome_prescriptions()
+				)
+
+				prepared_study_data_r(study_data)
+				message("Study data prepared in memory: ", input$study_name)
+
+			}, error = function(e) {
+				message("Error preparing study data: ", e$message)
+			})
+		})
+
 		# Save study
 		observeEvent(input$save_study, {
 			req(cases_r(), controls_r(), input$study_name)
@@ -505,7 +529,11 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 			}
 		})
 
-		return(list(cases_r, controls_r))
+		return(list(
+			cases_r = cases_r,
+			controls_r = controls_r,
+			prepared_study_data_r = prepared_study_data_r
+		))
 
 	})
 }

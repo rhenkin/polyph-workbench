@@ -107,6 +107,10 @@ server <- function(input, output, session) {
 	stored_queries <- reactiveValues()
 
 	patientFilter_r <- reactiveValues()
+
+	# Create a default reactive for analyzed_patient_count (before middle_card is initialized)
+	analyzed_patient_count <- reactiveVal(0)
+
 	# Run left side menu code
 	# From module: patientFilter_r
 	# To module: patient numbers and list out of outcomes
@@ -115,7 +119,8 @@ server <- function(input, output, session) {
 		patientFilter_r = patientFilter_r,
 		selected_patient_number = selected_patient_number,
 		total_patient_number = total_patient_number,
-		outcome_list = outcome_list
+		outcome_list = outcome_list,
+		analyzed_patient_count = analyzed_patient_count
 	)
 
 	patient_data <- reactive({
@@ -271,27 +276,34 @@ server <- function(input, output, session) {
 	)
 
 	# Middle module
-	middle_selected_tab <- middle_card_server(
+	middle_card_output <- middle_card_server(
 		id = "polyph_module",
-		filtered_prescription_data = filtered_prescription_data,
+		prescription_data = filtered_prescription_data,
 		ltc_data = ltc_data,
 		patient_data = patient_data,
 		outcome_data = outcome_data,
+        acute_presc_df = acute_presc_df,
 		min_nltc = patientFilter_r$input_list$min_nltc,
 		stored_queries = stored_queries,
 		polypharmacy_threshold = right_card_inputs$polypharmacy_threshold,
 		earliest_treatment_end = right_card_inputs$earliest_treatment_end
 	)
 
+	# Update analyzed patient count when outcome_prescriptions changes
 	observe({
-		req(middle_selected_tab$seltab())
+		req(middle_card_output$outcome_prescriptions())
+		analyzed_patient_count(uniqueN(middle_card_output$outcome_prescriptions()$patid))
+	})
+
+	observe({
+		req(middle_card_output$seltab())
 		sidebar_toggle(
 			id = "left_menu",
-			open = middle_selected_tab$seltab() == "outcome_explorer"
+			open = middle_card_output$seltab() == "outcome_explorer"
 		)
 		sidebar_toggle(
 			id = "right_menu",
-			open = middle_selected_tab$seltab() == "outcome_explorer"
+			open = middle_card_output$seltab() == "outcome_explorer"
 		)
 	})
 }

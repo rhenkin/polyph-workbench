@@ -11,7 +11,7 @@ middle_card_ui <- function(id) {
 
 #' @export
 middle_card_server <- function(id, prescription_data, ltc_data, patient_data, 
-                              outcome_data, min_nltc, 
+                              outcome_data, acute_presc_df, min_nltc, 
                               stored_queries, polypharmacy_threshold, earliest_treatment_end) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -68,15 +68,18 @@ middle_card_server <- function(id, prescription_data, ltc_data, patient_data,
       id = "ccm_module",
       patient_data = patient_data,
       outcome_prescriptions = outcome_prescriptions,
-      ltc_data = ltc_data 
+      ltc_data = ltc_data,
       study_dir = "studies"
     )
 
     module_cca_server(
       id = "cca_module",
-      matched_data = matched_data      
+      prepared_study_data_r = matched_data$prepared_study_data_r
     )
-    
-    return(list(seltab = reactive(input$middle_tab)))
+
+    return(list(
+      seltab = reactive(input$middle_tab),
+      outcome_prescriptions = outcome_prescriptions
+    ))
   })
 }

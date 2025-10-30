@@ -22,7 +22,7 @@ left_card_ui <- function(id) {
 }
 
 #' @export
-left_card_server <- function(id, patientFilter_r, selected_patient_number, total_patient_number, outcome_list) {
+left_card_server <- function(id, patientFilter_r, selected_patient_number, total_patient_number, outcome_list, analyzed_patient_count) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     updateSelectizeInput(session, "select_outcome", choices = outcome_list)
@@ -39,7 +39,7 @@ left_card_server <- function(id, patientFilter_r, selected_patient_number, total
     )) })
 
     output$selectedPatientInfo <-  renderText({
-      paste0("Filtered eligible patients: ", selected_patient_number(), "/", total_patient_number)
+      paste0("Selected patients: ", prettyNum(analyzed_patient_count(), big.mark = ","))
     })
 
     observeEvent(input$trigger_update,

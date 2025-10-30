@@ -10,13 +10,27 @@ module_cca_ui <- function(id) {
 				title = "Load dataset",
 				value = "load_dataset_panel",
 				icon = bs_icon("database"),
-				selectizeInput(
-					ns("dataset_list_selection"),
-					"Select dataset:",
-					choices = NULL,
-					options = list(dropdownParent = 'body')
+				radioButtons(
+					ns("dataset_source"),
+					"Dataset source:",
+					choices = c(
+						"Use current study from matching (if available)" = "memory",
+						"Load saved study from disk" = "disk"
+					),
+					selected = "memory"
 				),
-				actionButton(ns("load_saved_dataset"), "Load saved dataset")
+				conditionalPanel(
+					condition = "input.dataset_source == 'disk'",
+					ns = ns,
+					selectizeInput(
+						ns("dataset_list_selection"),
+						"Select dataset:",
+						choices = NULL,
+						options = list(dropdownParent = 'body')
+					)
+				),
+				uiOutput(ns("dataset_status")),
+				actionButton(ns("load_dataset"), "Load dataset", class = "btn-primary")
 			),
 			accordion_panel(
 				title = "Analysis",
@@ -131,59 +145,140 @@ module_cca_ui <- function(id) {
 	)
 }
 
-module_cca_server <- function(id, matched_data) {
+module_cca_server <- function(id, prepared_study_data_r = NULL) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
+
     # Reactive values for data storage
     patient_data_r <- reactiveVal()
     prescriptions_r <- reactiveVal()
     ltcs_r <- reactiveVal()
     cases_controls_r <- reactiveVal()
-    
+
     # Update dataset list
     observe({
-      updateSelectizeInput(session, "dataset_list_selection", 
+      updateSelectizeInput(session, "dataset_list_selection",
                           choices = list.files("studies", "*.rds"))
     })
-    
-    # Load dataset
+
+    # Display dataset status
+    output$dataset_status <- renderUI({
+      if (input$dataset_source == "memory") {
+        if (!is.null(prepared_study_data_r) && !is.null(prepared_study_data_r())) {
+          study_data <- prepared_study_data_r()
+          tags$div(
+            class = "alert alert-success",
+            style = "margin-top: 10px;",
+            tags$strong("Available: "), study_data$metadata$study_name,
+            tags$br(),
+            sprintf("Cases: %d, Controls: %d",
+                   study_data$metadata$n_cases,
+                   study_data$metadata$n_controls_unique)
+          )
+        } else {
+          tags$div(
+            class = "alert alert-warning",
+            style = "margin-top: 10px;",
+            "No study currently available in memory. Create a matched cohort first or load from disk."
+          )
+        }
+      } else {
+        if (!is.null(input$dataset_list_selection) && input$dataset_list_selection != "") {
+          tags$div(
+            class = "alert alert-info",
+            style = "margin-top: 10px;",
+            tags$strong("Selected: "), input$dataset_list_selection
+          )
+        } else {
+          tags$div(
+            class = "alert alert-info",
+            style = "margin-top: 10px;",
+            "Please select a saved dataset."
+          )
+        }
+      }
+    })
+
+    # Load dataset (from either source)
     observe({
-      req(input$dataset_list_selection)
-      
-      # Load and prepare data
-      dataset <- load_cca_dataset(file.path("studies", input$dataset_list_selection))
-      
-      # Filter by index date
-      filtered <- filter_by_index_date(
-        dataset$prescriptions,
-        dataset$ltcs,
-        dataset$matched_patids,
-        lookback_days = 84
-      )
-      
-      # Add burden groups
-      patient_data <- add_burden_groups(
-        dataset$patient_data,
-        filtered$prescriptions,
-        filtered$ltcs
-      )
-      
-      # Store in reactive values
-      patient_data_r(patient_data)
-      prescriptions_r(filtered$prescriptions)
-      ltcs_r(filtered$ltcs)
-      cases_controls_r(dataset$matched_patids[, .(patid, index_date, substance, group)])
-      
-      # Update UI
-      accordion_panel_close("cca_accordion", "load_dataset_panel")
-      accordion_panel_open("cca_accordion", "analysis_panel")
-      showNotification(
-        paste("Dataset", input$dataset_list_selection, "loaded successfully!"),
-        type = "message",
-        duration = 3
-      )
-    }) |> bindEvent(input$load_saved_dataset)
+      if (input$dataset_source == "memory") {
+        # Load from memory
+        req(prepared_study_data_r)
+        dataset <- prepared_study_data_r()
+        req(dataset)
+
+        # Prepare matched_patids structure
+        matched_patids <- dataset$matched_patids
+        matched_patids[, group := ifelse(treatment == 1, "case", "control")]
+
+        # Filter by index date
+        filtered <- filter_by_index_date(
+          dataset$all_prescriptions,
+          dataset$all_ltc,
+          matched_patids,
+          lookback_days = 84
+        )
+
+        # Add burden groups
+        patient_data <- add_burden_groups(
+          dataset$all_patient_data,
+          filtered$prescriptions,
+          filtered$ltcs
+        )
+
+        # Store in reactive values
+        patient_data_r(patient_data)
+        prescriptions_r(filtered$prescriptions)
+        ltcs_r(filtered$ltcs)
+        cases_controls_r(matched_patids[, .(patid, index_date, substance, group)])
+
+        # Update UI
+        accordion_panel_close("cca_accordion", "load_dataset_panel")
+        accordion_panel_open("cca_accordion", "analysis_panel")
+        showNotification(
+          paste("Dataset", dataset$metadata$study_name, "loaded from memory!"),
+          type = "message",
+          duration = 3
+        )
+
+      } else {
+        # Load from disk
+        req(input$dataset_list_selection)
+
+        # Load and prepare data
+        dataset <- load_cca_dataset(file.path("studies", input$dataset_list_selection))
+
+        # Filter by index date
+        filtered <- filter_by_index_date(
+          dataset$prescriptions,
+          dataset$ltcs,
+          dataset$matched_patids,
+          lookback_days = 84
+        )
+
+        # Add burden groups
+        patient_data <- add_burden_groups(
+          dataset$patient_data,
+          filtered$prescriptions,
+          filtered$ltcs
+        )
+
+        # Store in reactive values
+        patient_data_r(patient_data)
+        prescriptions_r(filtered$prescriptions)
+        ltcs_r(filtered$ltcs)
+        cases_controls_r(dataset$matched_patids[, .(patid, index_date, substance, group)])
+
+        # Update UI
+        accordion_panel_close("cca_accordion", "load_dataset_panel")
+        accordion_panel_open("cca_accordion", "analysis_panel")
+        showNotification(
+          paste("Dataset", input$dataset_list_selection, "loaded from disk!"),
+          type = "message",
+          duration = 3
+        )
+      }
+    }) |> bindEvent(input$load_dataset)
     
     # Value boxes
     output$value_box_cases <- renderText({

@@ -47,7 +47,7 @@ module_prescription_explorer_ui <- function(id) {
         ),        
         accordion_panel(
           "Time to outcome", module_presc_tto_ui(ns("tto_module"))
-        )
+        ),
         accordion_panel(
         	"Acute prescriptions", module_acute_presc_ui(ns("acute_presc_module"))
         )
