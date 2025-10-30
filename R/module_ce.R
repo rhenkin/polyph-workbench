@@ -7,8 +7,6 @@ module_ce_ui <- function(id) {
     nav_panel("Outcome explorer", value = "outcome_explorer",
       card(
         fillable = FALSE,
-        div(style = "min-height: 2rem",
-            textOutput(ns("npats_outcome_prescriptions"))),
         module_overview_ui(ns("overview_module")),
         module_prescription_explorer_ui(ns("prescription_explorer_module")),
         module_ltc_explorer_ui(ns("ltc_explorer_module"))
@@ -28,11 +26,6 @@ module_ce_server <- function(id,
     id,
     function(input, output, session) {
       ns <- session$ns
-
-      output$npats_outcome_prescriptions <- renderText({
-        n_patients <- data()$n_patients_outcome_prescriptions
-        paste0("Number of patients with outcome and prescription data: ", n_patients)
-      })
 
     module_overview_server(
       id = "overview_module",
