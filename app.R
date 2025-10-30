@@ -5,8 +5,6 @@ library(MASS)
 library(shiny)
 library(vegawidget)
 library(htmltools)
-# library(igraph)
-# library(visNetwork)
 library(gt)
 library(reactable)
 library(shinyjs)
@@ -18,6 +16,8 @@ library(bsicons)
 #setDTthreads(6)
 
 set.seed(42)
+
+source("global.R")
 
 
 # Convert date columns to proper format
