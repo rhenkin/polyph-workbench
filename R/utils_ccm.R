@@ -62,6 +62,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 		controls_presc[, .(patid, eventdate, outcome_age, substance, start_date, stop_date, duration, treatment)]
 	), fill = TRUE)
 	all_prescriptions[, study_name := study_name]
+    setkey(all_prescriptions, patid)
 
 	# ========================================================================
 	# Create matched patient data
@@ -75,6 +76,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 
 	all_patient_data <- rbindlist(list(cases_patient_data, controls_patient_data))
 	all_patient_data[, study_name := study_name]
+	setkey(all_patient_data, patid)
 
 	# ========================================================================
 	# Create matched LTC data
@@ -101,6 +103,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 		controls_ltc[, .(patid, eventdate, age_days, term, treatment)]
 	), fill = TRUE)
 	all_ltc[, study_name := study_name]
+    setkey(all_ltc, patid, eventdate)
 
 	# ========================================================================
 	# Create matched_patids for backwards compatibility
@@ -125,6 +128,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 	)]
 
 	matched_patids <- rbindlist(list(matched_cases, matched_controls), use.names = TRUE)
+    setkey(matched_patids, patid)
 
 	# ========================================================================
 	# Create study metadata

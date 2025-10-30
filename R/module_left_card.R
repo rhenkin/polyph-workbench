@@ -39,6 +39,7 @@ left_card_server <- function(id, patientFilter_r, selected_patient_number, total
     )) })
 
     output$selectedPatientInfo <-  renderText({
+      req(analyzed_patient_count()) 
       paste0("Selected patients: ", prettyNum(analyzed_patient_count(), big.mark = ","))
     })
 
