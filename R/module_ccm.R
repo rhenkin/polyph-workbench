@@ -186,6 +186,9 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 					dplyr::collect() %>%
 					as.data.table()
 
+				# Convert Date to IDate for consistency
+				eligible_pool[, prescription_date := as.IDate(prescription_date)]
+
 				# Filter out case patients in memory (faster than anti-join in Arrow)
 				eligible_pool <- eligible_pool[!patid %in% case_patids]
 
