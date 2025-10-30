@@ -350,8 +350,7 @@ module_cca_server <- function(id, prepared_study_data_r = NULL) {
       id = "prevalence",
       patient_data_r = patient_data_r,
       prescriptions_r = prescriptions_r,
-      ltcs_r = ltcs_r,
-      ltc_chapters = ltc_chapters
+      ltcs_r = ltcs_r
     )
   })
 }
