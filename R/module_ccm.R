@@ -9,7 +9,7 @@ module_ccm_ui <- function(id) {
 										 numericInput(ns("match_ratio"), "Control:Case ratio:",
 										 						 value = 4, min = 1, max = 10, step = 1),
 										 div("Risk-set matching using sex, binned age at prescription and binned time since multimorbidity"),
-										 actionButton(ns("create_cohort"), "Create matched cohort", class = "btn-primary")										 
+										 actionButton(ns("create_cohort"), "Create matched cohort", class = "btn-primary")
 							),
 							column(6,
 										 actionButton(ns("save_study"), "Save study", class = "btn-success"),
@@ -56,7 +56,7 @@ module_ccm_ui <- function(id) {
 	)
 }
 
-module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,															
+module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 															study_dir = "studies") {
 	moduleServer(id, function(input, output, session) {
 		ns <- session$ns
@@ -133,15 +133,10 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 
 				cases <- merge(new_cases, valid_ltcs[, .(
 					mm_date = .SD[ltc_index==2, eventdate]
-					# bodysystem_signature = paste(sort(unique(body_system)), collapse = "|"),
-					# n_bodysystem = uniqueN(body_system),
-					# n_ltcs = .N
 				)
 				, patid], by = "patid")
 
-				#cases <- merge(cases, valid_ltcs[, .(ltc_signature = paste(sort(term), collapse = "|"), n_ltcs = .N), patid], by = "patid")
-				#cases <- merge(cases, valid_ltcs[, .(mm_date = max(eventdate)), patid], by = "patid")
-				#cases <- merge(cases, patient_data()[, .(patid, dob, sex, eth_group, imd_quintile)],
+
 				cases <- merge(cases, patient_data()[, .(patid, dob, eth_group)],
 											 by = "patid")
 
@@ -165,7 +160,7 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 				)]
 				#cases[, strata := paste(sex, age_bin, n_ltcs, year, sep = "_")]
 				#cases[, strata := paste(sex, mm_duration_bin, age_bin, sep = "_")]
-				cases[, strata := stratum_alt]
+				cases[, strata := stratum_first_presc_bin]
 				# Store cases
 				cases_r(cases)
 
@@ -180,9 +175,9 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 				# Use Arrow to filter before collecting into memory
 				# Only select columns we need for sampling
 				eligible_pool <- mrp_dataset %>%
-					dplyr::filter(stratum_alt %in% strata_needs) %>%
+					dplyr::filter(stratum_first_presc_bin %in% strata_needs) %>%
 					dplyr::select(patid, prescription_date, substance, sex, age_at_rx, n_ltcs,
-								 imd_quintile, age_bin, stratum_alt, year, first_presc_bin, time_since_first_presc) %>%
+								 imd_quintile, age_bin, stratum_first_presc_bin, year, first_presc_bin, time_since_first_presc) %>%
 					dplyr::collect() %>%
 					as.data.table()
 
@@ -201,7 +196,7 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 				eligible_unique <- eligible_pool[
 					,
 					last(.SD),
-					by = .(strata = stratum_alt, patid)
+					by = .(strata = stratum_first_presc_bin, patid)
 				]
 
 				message(sprintf("Unique patient-strata combinations: %d", nrow(eligible_unique)))
@@ -348,8 +343,8 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 
 			output$matched_time_dist <- renderVegawidget({
 
-				summary_cases <- round(summary(cases$time_since_first_presc/365.25), digits = 2)
-				summary_controls <- round(summary(controls$time_since_first_presc/365.25), digits = 2)
+				summary_cases <- round(summary(cases$time_since_first_presc), digits = 2)
+				summary_controls <- round(summary(controls$time_since_first_presc), digits = 2)
 
 				df <- rbind(
 					as.data.table(as.list(summary_cases))[, group := "Cases"],

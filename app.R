@@ -19,24 +19,6 @@ set.seed(42)
 
 source("global.R")
 
-
-# Convert date columns to proper format
-#gold_ltc[, eventdate := as.IDate(eventdate)]
-#gold_cp[, start_date := as.IDate(start_date)]
-#gold_cp[, stop_date := as.IDate(stop_date)]
-#gold_outcomes[, eventdate := as.IDate(eventdate)]
-#gold_acute_presc[, start_date := as.IDate(start_date)]
-#gold_acute_presc[, stop_date := as.IDate(stop_date)]
-#gold_patient[, dob := as.IDate(dob)]
-
-# Convert patid to integer64 for consistency
-#gold_patient[, patid := bit64::as.integer64(patid)]
-#gold_ltc[, patid := bit64::as.integer64(patid)]
-#gold_cp[, patid := bit64::as.integer64(patid)]
-#gold_outcomes[, patid := bit64::as.integer64(patid)]
-#gold_acute_presc[, patid := bit64::as.integer64(patid)]
-
-
 #' @export
 ui <-
 	page_fluid(
@@ -53,13 +35,6 @@ ui <-
     	")
 		),
 		theme = bs_theme(preset = "flatly", font_scale = 0.8),
-		# layout_column_wrap(
-		# 	width = NULL, fill = TRUE,
-		# 	style = css(grid_template_columns = "1fr 4fr 1fr"),
-		# 	left_card_ui("patient_filter_module"),
-		# 	middle_card_ui("polyph_module"),
-		# 	right_card_ui("drug_filter_module")
-		# )
 		layout_sidebar(
 			# Left sidebar (collapsible)
 			sidebar = sidebar(

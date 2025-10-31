@@ -81,60 +81,11 @@ module_cca_ui <- function(id) {
 							ns("topten_substance_bar_plot")
 						)))
 					),
-                    
-                    
+
+
 					nav_panel(title = "Advanced", card(
 						card_header("Prevalence tables"), card_body(
-							accordion(
-								open = FALSE,
-								accordion_panel(title = "Long-term conditions", value = "ltc_prev_tables", navset_tab(
-									nav_panel(
-										"Group prevalences",
-										virtualSelectInput(
-											ns("ltc_freq_strat_variable"),
-											label = "Select a subset (optional):",
-											choices = NULL,
-											autoSelectFirstOption = FALSE,
-											search = FALSE,
-											showValueAsTags = TRUE,
-											disableOptionGroupCheckbox = TRUE,
-											multiple = FALSE,
-											dropboxWrapper = "body"
-										),
-										dataTableOutput(ns("ltc_freq_table"))
-									)
-								)),
-								accordion_panel(title = "Prescriptions", value = "presc_prev_tables", navset_tab(
-									nav_panel(
-										"Group prevalences",
-										virtualSelectInput(
-											ns("presc_freq_strat_variable"),
-											label = "Select a subset (optional):",
-											choices = NULL,
-											autoSelectFirstOption = FALSE,
-											search = FALSE,
-											showValueAsTags = TRUE,
-											disableOptionGroupCheckbox = TRUE,
-											multiple = FALSE,
-											dropboxWrapper = "body"
-										),
-										dataTableOutput(ns("presc_freq_table"))
-									)
-								)),
-								accordion_panel(
-									title = "Prescription prevalence per LTC",
-									value = "presc_ltc_prev",
-									card(
-										full_screen = TRUE,
-										height = "60em",
-										uiOutput(ns("ltc_dropdown_ui")),
-										# fluidRow(column(6, uiOutput(ns("ltc_dropdown_ui"))),
-										# 				 column(5, numericInput(ns("outcome_age_filter"), label = "Outcome age filter:", value = 100, min = 16, max = 100)),
-										# 				 column(1, textOutput(ns("selected_pats")))),
-										reactableOutput(ns("presc_by_ltc"), height = "50em")
-									)
-								),
-							)
+							module_cca_prevalence_ui(ns("prevalence"))
 						)
 					)),
 					full_screen  = TRUE
@@ -279,36 +230,36 @@ module_cca_server <- function(id, prepared_study_data_r = NULL) {
         )
       }
     }) |> bindEvent(input$load_dataset)
-    
+
     # Value boxes
     output$value_box_cases <- renderText({
       req(patient_data_r())
       prettyNum(nrow(patient_data_r()[treatment == 1]), big.mark = ",")
     })
-    
+
     output$value_box_controls <- renderText({
       req(patient_data_r())
       prettyNum(nrow(patient_data_r()[treatment == 0]), big.mark = ",")
     })
-    
+
     # Pyramid plots
     output$pp_pyramid_plot <- renderVegawidget({
       req(patient_data_r())
       create_burden_pyramid(patient_data_r(), "pp", title = "Polypharmacy burden")
     })
-    
+
     output$mltc_pyramid_plot <- renderVegawidget({
       req(patient_data_r())
       create_burden_pyramid(patient_data_r(), "n_ltc", title = "MLTC burden")
     })
-    
+
     # Top substances plot
     output$top_recentpresc_bar_plot <- renderVegawidget({
       req(cases_controls_r())
       full_screen <- isTruthy(input$recent_presc_card_full_screen)
       create_top_substances_plot(cases_controls_r(), full_screen = full_screen)
     })
-    
+
     # Top conditions plot
     output$topten_ltc_bar_plot <- renderVegawidget({
       req(ltcs_r())
@@ -318,33 +269,33 @@ module_cca_server <- function(id, prepared_study_data_r = NULL) {
         title = "Top 10 conditions most prevalent in cases"
       )
     })
-    
+
     # Top background medications plot
     output$topten_substance_bar_plot <- renderVegawidget({
       req(prescriptions_r())
       freq_data <- calculate_frequency_stats(prescriptions_r(), "substance")
       ratios <- calculate_case_control_ratios(freq_data, "substance", min_case_pct = 5)
       top_items <- ratios[order(-case_pct)][1:10, substance]
-      
+
       term_filtered <- freq_data[substance %in% top_items]
       term_filtered[, `:=`(
         diff = pct[group == "case"] - pct[group == "control"],
-        diff_label = sprintf("+%.1f%%", 
+        diff_label = sprintf("+%.1f%%",
           abs(pct[group == "case"] - pct[group == "control"])),
         max_pct = max(pct)
       ), by = substance]
-      
-      term_filtered[nchar(substance) > 15, 
+
+      term_filtered[nchar(substance) > 15,
         substance := paste0(strtrim(substance, 15), "...")
       ]
-      
+
       grouped_bar_plot(
         term_filtered,
         "substance",
         title = "Top 10 Background medications most prevalent in cases"
       ) |> as_vegaspec()
     })
-    
+
     # Prevalence tables sub-module
     module_cca_prevalence_server(
       id = "prevalence",
