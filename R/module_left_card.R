@@ -22,26 +22,27 @@ left_card_ui <- function(id) {
 }
 
 #' @export
-left_card_server <- function(id, patientFilter_r, selected_patient_number, total_patient_number, outcome_list, analyzed_patient_count) {
+left_card_server <- function(id, patientFilter_r, outcome_list, analyzed_patient_count) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     updateSelectizeInput(session, "select_outcome", choices = outcome_list)
 
     output$chapter_table <- renderDataTable({
-      datatable(ltc_chapters,class = list(stripe = FALSE),
-    , rownames = FALSE,
-    options = list(
-      order = list(list(1, 'asc')),
-      dom = "<f<t>>",
-      info = FALSE,
-      paging = FALSE,
-      scrollY = "300px"
+      datatable(ltc_chapters,
+      	class = list(stripe = FALSE),
+		    rownames = FALSE,
+		    options = list(
+		      order = list(list(1, 'asc')),
+		      dom = "<f<t>>",
+		      info = FALSE,
+		      paging = FALSE,
+		      scrollY = "300px"
     )) })
 
     output$selectedPatientInfo <-  renderText({
-      req(analyzed_patient_count()) 
+      # req(analyzed_patient_count() > 0)
       paste0("Selected patients: ", prettyNum(analyzed_patient_count(), big.mark = ","))
-    })
+    }) |> bindEvent(analyzed_patient_count(), ignoreInit = TRUE)
 
     observeEvent(input$trigger_update,
                  {

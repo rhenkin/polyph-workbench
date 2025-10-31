@@ -22,7 +22,7 @@ source("global.R")
 #' @export
 ui <-
 	page_fluid(
-		useBusyIndicators(),
+		useBusyIndicators(spinners = FALSE),
 		useShinyjs(),  # Initialize shinyjs
 		tags$head(
 			# CSS to style the checkmark
@@ -31,6 +31,65 @@ ui <-
         color: #28a745;
         margin-left: 10px;
         display: none;
+      }
+
+       /* Landing modal styling */
+      .landing-box {
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 30px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background-color: #ffffff;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 250px;
+      }
+
+      .landing-box:hover {
+        border-color: #2C3E50;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transform: translateY(-4px);
+      }
+
+      .landing-box-icon {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        color: #2C3E50;
+      }
+
+      .landing-box-title {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-bottom: 10px;
+        color: #2C3E50;
+      }
+
+      .landing-box-description {
+        font-size: 1rem;
+        color: #666;
+        line-height: 1.5;
+      }
+
+      .landing-modal-header {
+        text-align: center;
+        margin-bottom: 30px;
+      }
+
+      .landing-modal-title {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #2C3E50;
+        margin-bottom: 10px;
+      }
+
+      .landing-modal-subtitle {
+        font-size: 1.2rem;
+        color: #666;
       }
     	")
 		),
@@ -70,11 +129,67 @@ ui <-
 
 #' @export
 server <- function(input, output, session) {
+	# Reactive value to track if modal has been shown
+	modal_shown <- reactiveVal(FALSE)
+
+	# Show landing modal on startup
+	observe({
+		if (!modal_shown()) {
+			showModal(
+				modalDialog(
+					size = "xl",
+					easyClose = FALSE,
+					footer = NULL,
+					div(
+						class = "landing-modal-header",
+						div(class = "landing-modal-title", "Polypharmacy Workbench"),
+						div(class = "landing-modal-subtitle",
+								"Choose your analysis pathway to explore patterns in prescribing and multimorbidity")
+					),
+					layout_columns(
+						col_widths = c(6, 6),
+						# Box 1: Outcome Explorer
+						actionLink(
+							inputId = "nav_to_outcome_explorer",
+							label = div(
+								class = "landing-box",
+								bs_icon("search", class = "landing-box-icon"),
+								div(class = "landing-box-title", "Outcome Explorer"),
+								div(class = "landing-box-description",
+										"Explore prescribing patterns in patients with specific outcomes and create studies by matching to controls.")
+							)
+						),
+						# Box 3: Case-Control Analysis
+						actionLink(
+							inputId = "nav_to_analysis",
+							label = div(
+								class = "landing-box",
+								bs_icon("bar-chart-line", class = "landing-box-icon"),
+								div(class = "landing-box-title", "Case-Control Analysis"),
+								div(class = "landing-box-description",
+										"Analyse previously saved matched case-control datasets. Compare prescribing patterns, disease prevalence, and polypharmacy burden between cases and controls.")
+							)
+						)
+					)
+				)
+			)
+			modal_shown(TRUE)
+		}
+	})
+
+	# Navigation handlers
+	observeEvent(input$nav_to_outcome_explorer, {
+		removeModal()
+		nav_select("polyph_module-middle_tab", "outcome_explorer", session)
+	})
+
+	observeEvent(input$nav_to_analysis, {
+		removeModal()
+		nav_select("polyph_module-middle_tab", "cca", session)
+	})
+
 	# Get patient data directly from data.table
 	patient_df <- gold_patient[, .(patid, sex = gender, eth_group, imd_quintile)]
-	total_patient_number <- nrow(patient_df)
-	selected_patient_number <- reactiveVal(0)
-
 
 	# Get outcome list directly from data.table
 	outcome_list <- sort(unique(gold_outcomes$outcome))
@@ -92,8 +207,6 @@ server <- function(input, output, session) {
 	left_card_server(
 		id = "patient_filter_module",
 		patientFilter_r = patientFilter_r,
-		selected_patient_number = selected_patient_number,
-		total_patient_number = total_patient_number,
 		outcome_list = outcome_list,
 		analyzed_patient_count = analyzed_patient_count
 	)
@@ -129,10 +242,6 @@ server <- function(input, output, session) {
 		patientFilter_r$input_list$imd_quintile,
 		patientFilter_r$outcome
 	)
-
-	selected_patient_number <- reactive({
-		nrow(patient_data())
-	})
 
 	outcome_data <- reactive({
 		req(patientFilter_r$outcome)

@@ -6,7 +6,7 @@ gold_patient <- fread("../data/gold_cp_patient.csv")
 gold_ltc <- fread("../data/gold_ltc.csv")
 gold_cp <- fread("../data/gold_cp.csv")
 gold_outcomes <- fread("../data/gold_outcomes.csv")
-gold_acute_presc <- fread("../data/gold_acute_presc.csv")
+gold_acute_presc <- fread("../data/gold_acute_presc.csv", nrows = 10)
 
 # Set keys for optimal performance
 setkey(gold_patient, patid)
