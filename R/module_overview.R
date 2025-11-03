@@ -78,14 +78,14 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 			df3 <- patient_data()
 			df <- merge(df1[df2,], df3, by = "patid", all.x = TRUE, all.y = FALSE)
 			df <- df[patid %in% df3$patid]
-			df$age <- df$age_days/365.25
-			breaks <- c(0,40,60,80,Inf)
-			labels <- c("<=40", "41-60", "61-80", ">80")
-			df[, age_group := cut(age_days/365.25,
-														breaks = breaks,
-														labels = labels,
-														include.lowest = TRUE,
-														ordered_result = TRUE,)]
+			# df$age <- df$age_days/365.25
+			# breaks <- c(0,44,64,84,Inf)
+			# labels <- c("<=44", "45-64", "65-84", "85+")
+			# df[, age_group := cut(round(age_days/365.25, digits = 0),
+			# 											breaks = breaks,
+			# 											labels = labels,
+			# 											include.lowest = FALSE,
+			# 											ordered_result = TRUE,)]
 
 			df[,age_first_prescription := (first_prescription - dob)]
 			df[, first_prescription_age_group := cut(age_first_prescription/365.25,
@@ -229,7 +229,7 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 			summary_stats <- results[order(pp), c(.N,as.list(quantile(time_to_outcome, c(0.25,0.5,0.75)))), pp]
 			colnames(summary_stats) <- c("pp", "N", "iqr1", "median", "iqr2")
 
-			tto_line_plot(summary_stats) |> as_vegaspec()		
+			tto_line_plot(summary_stats) |> as_vegaspec()
 		})
 
 	})

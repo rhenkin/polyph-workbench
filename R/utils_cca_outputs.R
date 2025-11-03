@@ -126,32 +126,188 @@ create_stratification_choices <- function(patient_data) {
   choices
 }
 
-#' Calculate prescription prevalence by LTC
-#' @param prescriptions data.table of prescriptions
-#' @param ltcs data.table of LTCs
-#' @param selected_ltcs Character vector of selected LTC terms
+#' Calculate prevalence by condition
+#' @param data1 data.table of primary data (prescriptions or ltcs)
+#' @param data2 data.table of secondary data (ltcs or prescriptions)
+#' @param selected_values Character vector of selected values to filter data2
+#' @param filter_col Column name in data2 to filter by (e.g., "term" or "substance")
+#' @param group_col Column name in data1 to group by (e.g., "substance" or "term")
 #' @return data.table with prevalence by group
-calculate_presc_by_ltc_cca <- function(prescriptions, ltcs, selected_ltcs) {
-  patids <- unique(ltcs[term %in% selected_ltcs, patid])
+calculate_prevalence_cca_old <- function(data1, data2, selected_values, filter_col, group_col,
+																		 test_significance = TRUE) {
+	patids <- unique(data2[get(filter_col) %in% selected_values, patid])
 
-  presc_freq <- prescriptions[patid %in% patids,
-    list(
-      N_with_disease = uniqueN(patid),
-      Prevalence = round(100 * (uniqueN(patid) / length(patids)), digits = 2),
-      `Median Duration (years)` = round(median(duration / 365.2), digits = 2),
-      `IQR (Q1-Q3)` = paste0(
-        "(",
-        round(quantile(duration / 365.2, 0.25, na.rm = TRUE), 2), " - ",
-        round(quantile(duration / 365.2, 0.75, na.rm = TRUE), 2), ")"
-      )
-    ),
-    .(group, substance)
-  ]
+	presc_freq <- data1[patid %in% patids,
+											list(
+												N_with_disease = uniqueN(patid),
+												Prevalence = round(100 * (uniqueN(patid) / length(patids)), digits = 2)
+												# `Median Duration (years)` = round(median(duration / 365.2), digits = 2),
+												# `IQR (Q1-Q3)` = paste0(
+												# 	"(",
+												# 	round(quantile(duration / 365.2, 0.25, na.rm = TRUE), 2), " - ",
+												# 	round(quantile(duration / 365.2, 0.75, na.rm = TRUE), 2), ")"
+												# )
+											),
+											by = c("group", group_col)
+	]
 
-  result <- dcast(presc_freq, substance ~ group, value.var = "Prevalence", fill = 0)
-  result <- result[case >= 1 & control >= 1]
-  result[, Prevalence_Ratio := round(case / control, digits = 2)]
-  result[is.infinite(Prevalence_Ratio), Prevalence_Ratio := 0]
+	result <- dcast(presc_freq,
+									as.formula(paste(group_col, "~ group")),
+									value.var = "Prevalence",
+									fill = 0)
+	if (nrow(result) == 0) return(NULL)
+	result <- result[case >= 1 & control >= 1]
 
-  result
+	if (test_significance) {
+		# Get case and control patient counts for each item
+		case_patids <- unique(data1[patid %in% patids & group == "case", patid])
+		control_patids <- unique(data1[patid %in% patids & group == "control", patid])
+		n_case <- length(case_patids)
+		n_control <- length(control_patids)
+
+		result[, p_value := {
+			# For each substance/term, create 2x2 contingency table
+			current_item <- get(group_col)
+			item_case <- data1[patid %in% case_patids & get(group_col) == current_item, uniqueN(patid)]
+			item_control <- data1[patid %in% control_patids & get(group_col) == current_item, uniqueN(patid)]
+			no_item_case <- n_case - item_case
+			no_item_control <- n_control - item_control
+
+			contingency <- matrix(c(item_case, item_control, no_item_case, no_item_control),
+														nrow = 2)
+			suppressWarnings(chisq.test(contingency, correct = TRUE)$p.value)
+		}, by = group_col]
+
+		# Adjust for multiple testing
+		result[, p_adj := p.adjust(p_value, method = "BH")]
+		result[, p_adj := round(p_adj, 4)]
+
+		# Add asterisk to significant items (using adjusted p-value)
+		result[p_adj < 0.05, (group_col) := paste0(get(group_col), "*")]
+	}
+
+	result[, Prevalence_Ratio := round(case / control, digits = 2)]
+	result[, Prevalence_Difference := round(case-control, digits = 2)]
+	result[is.infinite(Prevalence_Ratio), Prevalence_Ratio := 0]
+	result
+}
+
+calculate_prevalence_cca <- function(data1, data2, selected_values,
+																		 filter_col, group_col,
+																		 test_significance = TRUE,
+																		 p_adjust_method = "BH",
+																		 test_method = "chisq",
+																		 use_odds_ratio = TRUE) {
+	patids <- unique(data2[get(filter_col) %in% selected_values, patid])
+
+	presc_freq <- data1[patid %in% patids,
+											list(
+												N_with_disease = uniqueN(patid),
+												Prevalence = round(100 * (uniqueN(patid) / length(patids)), digits = 2)
+											),
+											by = c("group", group_col)
+	]
+
+	result <- dcast(presc_freq,
+									as.formula(paste(group_col, "~ group")),
+									value.var = "Prevalence",
+									fill = 0)
+	if (nrow(result) == 0) return(NULL)
+	result <- result[case >= 1 & control >= 1]
+
+	if (use_odds_ratio && test_significance) {
+		# Get case and control patient IDs
+		case_patids <- unique(data1[patid %in% patids & group == "case", patid])
+		control_patids <- unique(data1[patid %in% patids & group == "control", patid])
+		n_case <- length(case_patids)
+		n_control <- length(control_patids)
+
+		# Get items
+		items <- result[[group_col]]
+
+		# Build case matrix
+		case_data <- data1[patid %in% case_patids & get(group_col) %in% items]
+		case_matrix <- dcast(case_data, patid ~ get(group_col),
+												 fun.aggregate = function(x) as.integer(length(x) > 0),
+												 value.var = "patid")
+		case_matrix[, patid := NULL]
+		case_matrix <- as.matrix(case_matrix)
+
+		# Build control matrix
+		control_data <- data1[patid %in% control_patids & get(group_col) %in% items]
+		control_matrix <- dcast(control_data, patid ~ get(group_col),
+														fun.aggregate = function(x) as.integer(length(x) > 0),
+														value.var = "patid")
+		control_matrix[, patid := NULL]
+		control_matrix <- as.matrix(control_matrix)
+
+		# Vectorized calculation of contingency table cells (convert to numeric to avoid overflow)
+		item_case <- as.numeric(colSums(case_matrix))
+		item_control <- as.numeric(colSums(control_matrix))
+		no_item_case <- as.numeric(n_case) - item_case
+		no_item_control <- as.numeric(n_control) - item_control
+
+		# Vectorized OR calculation
+		valid <- (item_case > 0) & (item_control > 0) & (no_item_case > 0) & (no_item_control > 0)
+		or <- rep(NA_real_, length(items))
+		or[valid] <- (item_case[valid] * no_item_control[valid]) / (item_control[valid] * no_item_case[valid])
+
+		# Vectorized CI calculation
+		ci_lower <- rep(NA_real_, length(items))
+		ci_upper <- rep(NA_real_, length(items))
+
+		if (any(valid)) {
+			log_or <- log(or[valid])
+			se_log_or <- sqrt(1/item_case[valid] + 1/item_control[valid] +
+													1/no_item_case[valid] + 1/no_item_control[valid])
+			ci_lower[valid] <- exp(log_or - 1.96 * se_log_or)
+			ci_upper[valid] <- exp(log_or + 1.96 * se_log_or)
+		}
+
+		# Add to result
+		result[, OR := round(or, 2)]
+		result[, OR_CI_lower := round(ci_lower, 2)]
+		result[, OR_CI_upper := round(ci_upper, 2)]
+
+		if (test_method == "fisher") {
+			# Fisher test still needs to be done row-by-row
+			p_values <- sapply(seq_along(items), function(i) {
+				contingency <- matrix(c(item_case[i], item_control[i],
+																no_item_case[i], no_item_control[i]), nrow = 2)
+				fisher.test(contingency)$p.value
+			})
+			result[, p_value := p_values]
+
+		} else if (test_method == "chisq") {
+			# Fully vectorized chi-square (correct formula)
+			n_total <- n_case + n_control
+			row1_total <- item_case + item_control
+			row2_total <- no_item_case + no_item_control
+			col1_total <- item_case + no_item_case  # = n_case
+			col2_total <- item_control + no_item_control  # = n_control
+
+			# Correct chi-square formula
+			chisq_stat <- (n_total * (item_case * no_item_control - item_control * no_item_case)^2) /
+				(row1_total * row2_total * col1_total * col2_total)
+
+			p_values <- pchisq(chisq_stat, df = 1, lower.tail = FALSE)
+			result[, p_value := p_values]
+		}
+
+		# Adjust for multiple testing (vectorized)
+		result[, p_adj := p.adjust(p_value, method = p_adjust_method)]
+
+		# Add asterisk to significant items (vectorized)
+		result[p_adj < 0.05, (group_col) := paste0(get(group_col), "*")]
+
+		result[, p_adj := round(p_adj, 4)]
+
+
+	} else {
+		# Fall back to simple prevalence ratio
+		result[, Prevalence_Ratio := round(case / control, digits = 2)]
+		result[is.infinite(Prevalence_Ratio), Prevalence_Ratio := 0]
+	}
+
+	result
 }

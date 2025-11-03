@@ -27,6 +27,8 @@ ui <-
 		tags$head(
 			# CSS to style the checkmark
 			tags$style("
+			.vscomp-dropbox-container  {z-index:99999 !important;}
+
       .action-complete {
         color: #28a745;
         margin-left: 10px;

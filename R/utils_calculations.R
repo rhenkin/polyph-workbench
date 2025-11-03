@@ -144,33 +144,57 @@ format_patient_count <- function(data) {
 #' @param breaks numeric vector of break points
 #' @param value_col name of column to group (default: "value")
 #' @param group_col name of output grouped column (default: "group")
-#' @param label_fmt string format for labels (default: "[%g-%g)")
+#' @param label_fmt string format for labels (default: "[%g-%g]")
 #' @param right logical, intervals closed on right? (default: TRUE)
-#' @param label_suffix optional suffix for labels
+#' @param first_prefix optional prefix for first label (e.g., "<" or "≤")
+#' @param first_suffix optional suffix for first label
+#' @param last_prefix optional prefix for last label
+#' @param last_suffix optional suffix for last label (e.g., "+")
 #' @return data.table with new group column
 create_value_groups <- function(dt,
-                                breaks,
-                                value_col = "value",
-                                group_col = "group",
-                                label_fmt = "[%g-%g]",
-                                right = TRUE,
-                                label_suffix = NULL) {
+																breaks,
+																value_col = "value",
+																group_col = "group",
+																label_fmt = "[%g-%g]",
+																right = TRUE,
+																first_prefix = NULL,
+																first_suffix = NULL,
+																last_prefix = NULL,
+																last_suffix = NULL) {
 	dt_copy <- copy(dt)
-  if(max(breaks) < max(dt_copy[[value_col]], na.rm=TRUE)) {
-    breaks <- c(breaks, max(dt_copy[[value_col]], na.rm=TRUE))
-  }
-  labels <- sprintf(label_fmt, breaks[-length(breaks)], breaks[-1]-1)
-  if(!is.null(label_suffix)) labels <- paste0(labels, label_suffix)
-  labels[length(labels)] <- sub("\\)", "]", labels[length(labels)])
 
-  dt_copy[, (group_col) := cut(get(value_col),
-                               breaks = breaks,
-                               labels = labels,
-                               right = right,
-                               include.lowest = TRUE,
-                               ordered = TRUE)][,.("patid", group_col)]
-  setkey(dt_copy, patid)
-  return(dt_copy)
+	# Extend breaks to cover max value if needed
+	if(max(breaks) < max(dt_copy[[value_col]], na.rm = TRUE)) {
+		breaks <- c(breaks, max(dt_copy[[value_col]], na.rm = TRUE))
+	}
+
+	# Create base labels
+	labels <- sprintf(label_fmt, breaks[-length(breaks)], breaks[-1] - 1)
+
+	# Modify first label
+	if(!is.null(first_prefix) || !is.null(first_suffix)) {
+		labels[1] <- sprintf("%s%g%s",
+												 ifelse(!is.null(first_prefix), first_prefix, ""),
+												 breaks[2],
+												 ifelse(!is.null(first_suffix), first_suffix, ""))
+	}
+
+	# Modify last label
+	if(!is.null(last_prefix) || !is.null(last_suffix)) {
+		labels[length(labels)] <- sprintf("%s%g%s",
+																			ifelse(!is.null(last_prefix), last_prefix, ""),
+																			breaks[length(breaks) - 1],
+																			ifelse(!is.null(last_suffix), last_suffix, ""))
+	}
+
+	dt_copy[, (group_col) := cut(get(value_col),
+															 breaks = breaks,
+															 labels = labels,
+															 right = right,
+															 include.lowest = TRUE,
+															 ordered = TRUE)][, .(patid, group_col)]
+	setkey(dt_copy, patid)
+	return(dt_copy)
 }
 
 create_age_groups <- function(dt, n_groups = 5) {

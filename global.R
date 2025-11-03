@@ -1,12 +1,18 @@
 bnf_lookup <- fread("new_bnf_lkp.csv")
 ltc_chapters <- fread("chapters.tsv")
+dev <- TRUE
+nrows_to_load <- Inf
+if (dev == TRUE) {
+	nrows_to_load <- 10000
+}
+
 
 # Load data.tables
 gold_patient <- fread("../data/gold_cp_patient.csv")
 gold_ltc <- fread("../data/gold_ltc.csv")
 gold_cp <- fread("../data/gold_cp.csv")
 gold_outcomes <- fread("../data/gold_outcomes.csv")
-gold_acute_presc <- fread("../data/gold_acute_presc.csv", nrows = 10)
+gold_acute_presc <- fread("../data/gold_acute_presc.csv", nrows = nrows_to_load)
 
 # Set keys for optimal performance
 setkey(gold_patient, patid)
