@@ -61,7 +61,7 @@ right_card_ui <- function(id) {
                actionButton(ns("add_chapter"), "+", class = "action-btn"),
                selectInput(ns("chapter"),
                            "Chapter",
-                           choices = NULL),
+                           choices = sort(unique(bnf_lookup$BNF_Chapter))),
                actionButton(ns("exclude_chapter"), "-", class = "action-btn")
            ),
 
@@ -131,10 +131,10 @@ right_card_server <- function(id) {
     excluded_bnfs <- reactiveVal(default_excluded_bnf)
 
     # Update Chapter choices on initialization
-    observe({
-      chapters <- sort(unique(bnf_lookup$BNF_Chapter))
-      updateSelectInput(session, "chapter", choices = chapters)
-    })
+    # observe({
+    #   chapters <- sort(unique(bnf_lookup$BNF_Chapter))
+    #   updateSelectInput(session, "chapter", choices = chapters)
+    # })
 
     # Update Section based on Chapter
     observe({

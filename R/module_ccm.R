@@ -118,7 +118,7 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 		})
 
 		observe({
-			req(cases_r(), controls_r())
+			req(!is.null(cases_r()), !is.null(controls_r()))
 
 			cases <- cases_r()
 			controls <- controls_r()
@@ -163,7 +163,7 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 				spec |> as_vegaspec()
 
 			})
-		})
+		}, suspended = TRUE)
 
 		# Prepare study data in memory when matching completes
 		observe({
@@ -186,7 +186,7 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 			}, error = function(e) {
 				message("Error preparing study data: ", e$message)
 			})
-		})
+		}, suspended = TRUE)
 
 		# Save study
 		observeEvent(input$save_study, {

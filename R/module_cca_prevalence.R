@@ -101,23 +101,6 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
       calculate_frequency_stats(ltcs, "term")
     })
 
-    # Prescription frequency with optional stratification
-    presc_freq_df <- reactive({
-      req(prescriptions_r())
-      presc <- prescriptions_r()
-      patient_data <- patient_data_r()
-      strat_var <- input$presc_freq_strat_variable
-
-      if (strat_var != "") {
-        parts <- strsplit(strat_var, "#")[[1]]
-        column_name <- parts[1]
-        filter_value <- parts[2]
-        selected_patids <- patient_data[get(column_name) == filter_value, patid]
-        presc <- presc[patid %in% selected_patids]
-      }
-
-      calculate_frequency_stats(presc, "substance")
-    })
 
     # Render tables
     output$ltc_freq_table <- renderReactable({
@@ -125,6 +108,87 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
       colnames(table_data) <- c("Condition", "Cases (%)", "Controls (%)", "Case/Control Ratio")
       reactable(table_data[order(-`Case/Control Ratio`)],
       					showPageInfo = FALSE, defaultPageSize = 15)
+    })
+
+    # Presc dropdown
+    output$presc_dropdown_ui <- renderUI({
+    	req(prescriptions_r())
+    	prescs <- prescriptions_r()
+    	sub_chapter <- bnf_lookup[,.(BNF_Chemical_Substance, BNF_Section)] |> unique()
+    	sub_chapter <- sub_chapter[,first(.SD) ,BNF_Chemical_Substance]
+    	choices <- prescs[sub_chapter,
+    										.(substance, BNF_Section),
+    										on = .(substance = BNF_Chemical_Substance)] |> unique()
+    	choices <- choices[order(BNF_Section, substance)]
+    	with(choices, split(substance, BNF_Section))
+    	virtualSelectInput(
+    		ns("presc_dropdown"),
+    		label = "Select 1 or more substances:",
+    		choices = with(choices, split(substance, BNF_Section)),
+    		multiple = TRUE,
+    		search = TRUE
+    	)
+    })
+
+    # LTC by prescription table
+    output$ltc_by_presc <- renderReactable({
+    	req(ltcs_r(), input$presc_dropdown)
+
+    	result <- calculate_prevalence_cca(
+    		ltcs_r(),
+    		prescriptions_r(),
+    		input$presc_dropdown,
+    		"substance",
+    		"term"
+    	)
+
+    	validate(need(!is.null(result), "No results found for filter"))
+
+    	reactable(
+    		result,
+    		columns = list(
+    			p_value = colDef(show = FALSE),  # Hide these columns
+    			p_adj = colDef(show = FALSE)
+    		),
+    		details = function(index) {
+    			p_val <- result[index, p_value]
+    			p_adj_val <- result[index, p_adj]
+    			if (is.na(p_val) & is.na(p_adj_val)) return(NULL)
+    			htmltools::div(
+    				style = "padding: 16px",
+    				htmltools::tags$b("Statistical Testing:"),
+    				htmltools::tags$div(
+    					style = "margin-top: 8px",
+    					sprintf("Raw p-value: %.4f", p_val)
+    				),
+    				htmltools::tags$div(
+    					sprintf("Adjusted p-value: %.4f", p_adj_val)
+    				),
+    				htmltools::tags$div(
+    					style = "margin-top: 8px; font-style: italic; color: #666;",
+    					if (p_adj_val < 0.05) "Statistically significant (p < 0.05)" else "Not significant"
+    				)
+    			)
+    		}
+    		,showPageInfo = FALSE, defaultPageSize = 15)
+    })
+
+    # Prescription frequency with optional stratification
+    presc_freq_df <- reactive({
+    	req(prescriptions_r())
+    	presc <- prescriptions_r()
+    	patient_data <- patient_data_r()
+    	strat_var <- input$presc_freq_strat_variable
+
+    	if (strat_var != "") {
+    		parts <- strsplit(strat_var, "#")[[1]]
+    		column_name <- parts[1]
+    		filter_value <- parts[2]
+    		selected_patids <- patient_data[get(column_name) == filter_value, patid]
+    		presc <- presc[patid %in% selected_patids]
+    	}
+
+    	calculate_frequency_stats(presc, "substance")
     })
 
     output$presc_freq_table <- renderReactable({
@@ -191,67 +255,6 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
       	},showPageInfo = FALSE, defaultPageSize = 15)
     })
 
-    # LTC dropdown
-    output$presc_dropdown_ui <- renderUI({
-    	req(prescriptions_r())
-    	prescs <- prescriptions_r()
-    	sub_chapter <- bnf_lookup[,.(BNF_Chemical_Substance, BNF_Section)] |> unique()
-    	sub_chapter <- sub_chapter[,first(.SD) ,BNF_Chemical_Substance]
-    	choices <- prescs[sub_chapter,
-    										.(substance, BNF_Section),
-    										on = .(substance = BNF_Chemical_Substance)] |> unique()
-    	choices <- choices[order(BNF_Section, substance)]
-    	with(choices, split(substance, BNF_Section))
-    	virtualSelectInput(
-    		ns("presc_dropdown"),
-    		label = "Select 1 or more substances:",
-    		choices = with(choices, split(substance, BNF_Section)),
-    		multiple = TRUE,
-    		search = TRUE
-    	)
-    })
 
-    # Prescription by LTC table
-    output$ltc_by_presc <- renderReactable({
-    	req(ltcs_r(), input$presc_dropdown)
-
-    	result <- calculate_prevalence_cca(
-    		ltcs_r(),
-    		prescriptions_r(),
-    		input$presc_dropdown,
-    		"substance",
-    		"term"
-    	)
-
-    	validate(need(!is.null(result), "No results found for filter"))
-
-    	reactable(
-    		result,
-    		columns = list(
-    			p_value = colDef(show = FALSE),  # Hide these columns
-    			p_adj = colDef(show = FALSE)
-    		),
-    		details = function(index) {
-    			p_val <- result[index, p_value]
-    			p_adj_val <- result[index, p_adj]
-					if (is.na(p_val) & is.na(p_adj_val)) return(NULL)
-    			htmltools::div(
-    				style = "padding: 16px",
-    				htmltools::tags$b("Statistical Testing:"),
-    				htmltools::tags$div(
-    					style = "margin-top: 8px",
-    					sprintf("Raw p-value: %.4f", p_val)
-    				),
-    				htmltools::tags$div(
-    					sprintf("Adjusted p-value: %.4f", p_adj_val)
-    				),
-    				htmltools::tags$div(
-    					style = "margin-top: 8px; font-style: italic; color: #666;",
-    					if (p_adj_val < 0.05) "Statistically significant (p < 0.05)" else "Not significant"
-    				)
-    			)
-    		}
-    	,showPageInfo = FALSE, defaultPageSize = 15)
-    })
   })
 }

@@ -4,7 +4,8 @@
 #' @param title Plot title
 #' @return vegaspec object
 create_burden_pyramid <- function(patient_data, burden_col = "pp", title = "Burden") {
-  upper_band <- round(quantile(patient_data[[burden_col]], 0.75) * 1.5)
+  upper_band <- round(quantile(patient_data[[burden_col]], 0.75) * 1.75)
+
   band_col <- paste0(burden_col, "_band")
 
   patient_data[, (band_col) := ifelse(

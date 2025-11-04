@@ -21,12 +21,12 @@ module_overview_ui <- function(id) {
 				# layout_columns(
 				#   col_widths = c(6, 6),
 				fluidRow(
-					vegawidgetOutput(ns("pp_histogram")),
-					vegawidgetOutput(ns("tto_histogram")),
-					vegawidgetOutput(ns("pp_sex_dist")),
-					vegawidgetOutput(ns("pp_age_group_dist")),
-					vegawidgetOutput(ns("pp_eth_dist")),
-					vegawidgetOutput(ns("pp_imd_dist"))
+					# vegawidgetOutput(ns("pp_histogram")),
+					# vegawidgetOutput(ns("tto_histogram")),
+					# vegawidgetOutput(ns("pp_sex_dist")),
+					# vegawidgetOutput(ns("pp_age_group_dist")),
+					# vegawidgetOutput(ns("pp_eth_dist")),
+					# vegawidgetOutput(ns("pp_imd_dist"))
 				)
 			),
 			accordion_panel(
@@ -59,6 +59,7 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 
 		# Core reactive data sources
 		polypharmacy_counts <- reactive({
+			req(outcome_prescriptions())
 			df <- outcome_prescriptions()
 			df <-
 				unique(df[, list(
@@ -111,84 +112,89 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 		})
 
 		# 1. PP Histogram
-		output$pp_histogram <- renderVegawidget({
-			df <- polypharmacy_counts()
-			precalc_histogramPlot(df,
-														"pp",
-														title = "Burden before diagnosis")
-		})
-
-		# 2. TTO Histogram
-		output$tto_histogram <- renderVegawidget({
-			df <- polypharmacy_counts()
-			precalc_histogramPlot(df[,time_to_outcome := time_to_outcome/365.25],
-														"time_to_outcome",
-														title = "Time from first treatment to outcome")
-		})
-
-		# 3. PP by Sex Distribution
-		output$pp_sex_dist <- renderVegawidget({
-			df <- calculateDensityByGroup_dt(data_for_histogram(), "pp", "sex")
-			precalc_facetedViolinPlot(df,
-																"pp",
-																"sex",
-																title = "Burden by sex")
-		})
-
-		# 4. PP by Age Group Distribution
-		output$pp_age_group_dist <- renderVegawidget({
-			validate(need(selected_outcome(), "Select an outcome to view age distribution"))
-			df <- polypharmacy_counts()
-			df2 <- outcome_ltc_events()
-			df2 <- create_age_groups(df2, 5)
-			df <- df2[df]
-			facetedViolinPlot(df,
-												"pp",
-												"age_group",
-												title = "Burden by age groups",
-												w = 100)
-		})
-
-		# 5. PP by Ethnicity Distribution
-		output$pp_eth_dist <- renderVegawidget({
-			df <- calculateDensityByGroup_dt(data_for_histogram(), "pp", "eth_group")
-			precalc_facetedViolinPlot(df,
-																"pp",
-																"eth_group",
-																title = "Burden by ethnic group",
-																w = 100)
-		})
-
-		# 6. PP by IMD Distribution
-		output$pp_imd_dist <- renderVegawidget({
-			df <- calculateDensityByGroup_dt(data_for_histogram(), "pp", "imd_quintile")
-			precalc_facetedViolinPlot(df,
-																"pp",
-																"imd_quintile",
-																title = "Burden by IMD quintile")
-		})
-
-		# 7. Demographic distribution tables
-		output$demodist_table <- render_gt({
-			pp_df <- pp_demog_table()
-			to_print <- prepare_cohort_demog_data(pp_df)
-
-			gt(to_print, row_group_as_column = TRUE, groupname_col = "group") |>
-				tab_style(
-					style = list(
-						weight = "bold"
-					),
-					locations = cells_stub()
-				) |>
-				fmt_percent(
-					columns = "%",
-					decimals = 2
-				) |>
-				cols_nanoplot(columns = "pp_values",
-											columns_x_vals = "pp_labels",
-											autohide = TRUE,
-											new_col_name = "Polypharmacy burden distribution")
-		})
+		# output$pp_histogram <- renderVegawidget({
+		# 	req(polypharmacy_counts())
+		# 	df <- polypharmacy_counts()
+		# 	precalc_histogramPlot(df,
+		# 												"pp",
+		# 												title = "Burden before diagnosis")
+		# })
+		#
+		# # 2. TTO Histogram
+		# output$tto_histogram <- renderVegawidget({
+		# 	req(polypharmacy_counts())
+		# 	df <- polypharmacy_counts()
+		# 	precalc_histogramPlot(df[,time_to_outcome := time_to_outcome/365.25],
+		# 												"time_to_outcome",
+		# 												title = "Time from first treatment to outcome")
+		# })
+		#
+		# # 3. PP by Sex Distribution
+		# output$pp_sex_dist <- renderVegawidget({
+		# 	req(data_for_histogram())
+		# 	df <- calculateDensityByGroup_dt(data_for_histogram(), "pp", "sex")
+		# 	precalc_facetedViolinPlot(df,
+		# 														"pp",
+		# 														"sex",
+		# 														title = "Burden by sex")
+		# })
+		#
+		# # 4. PP by Age Group Distribution
+		# output$pp_age_group_dist <- renderVegawidget({
+		# 	validate(need(selected_outcome(), "Select an outcome to view age distribution"))
+		# 	df <- polypharmacy_counts()
+		# 	df2 <- outcome_ltc_events()
+		# 	df2 <- create_age_groups(df2, 5)
+		# 	df <- df2[df]
+		# 	facetedViolinPlot(df,
+		# 										"pp",
+		# 										"age_group",
+		# 										title = "Burden by age groups",
+		# 										w = 100)
+		# })
+		#
+		# # 5. PP by Ethnicity Distribution
+		# output$pp_eth_dist <- renderVegawidget({
+		# 	req(data_for_histogram())
+		# 	df <- calculateDensityByGroup_dt(data_for_histogram(), "pp", "eth_group")
+		# 	precalc_facetedViolinPlot(df,
+		# 														"pp",
+		# 														"eth_group",
+		# 														title = "Burden by ethnic group",
+		# 														w = 100)
+		# })
+		#
+		# # 6. PP by IMD Distribution
+		# output$pp_imd_dist <- renderVegawidget({
+		# 	req(data_for_histogram())
+		# 	df <- calculateDensityByGroup_dt(data_for_histogram(), "pp", "imd_quintile")
+		# 	precalc_facetedViolinPlot(df,
+		# 														"pp",
+		# 														"imd_quintile",
+		# 														title = "Burden by IMD quintile")
+		# })
+		#
+		# # 7. Demographic distribution tables
+		# output$demodist_table <- render_gt({
+		# 	pp_df <- pp_demog_table()
+		# 	to_print <- prepare_cohort_demog_data(pp_df)
+		#
+		# 	gt(to_print, row_group_as_column = TRUE, groupname_col = "group") |>
+		# 		tab_style(
+		# 			style = list(
+		# 				weight = "bold"
+		# 			),
+		# 			locations = cells_stub()
+		# 		) |>
+		# 		fmt_percent(
+		# 			columns = "%",
+		# 			decimals = 2
+		# 		) |>
+		# 		cols_nanoplot(columns = "pp_values",
+		# 									columns_x_vals = "pp_labels",
+		# 									autohide = TRUE,
+		# 									new_col_name = "Polypharmacy burden distribution")
+		# })
 
 		output$pp_demodist_table <- render_gt({
 			pp_df <- pp_demog_table()
@@ -213,12 +219,14 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 		})
 
 		output$paired_heatmap <- renderVegawidget({
+			req(pp_demog_table())
 			dt <- pp_demog_table()
 			pairedBarCharts(dt, input$paired_x_variable, input$paired_y_variable)
 		})
 
 		# 9. Association between PP and time-to-outcome
 		output$tto_curve <- renderVegawidget({
+			req(outcome_prescriptions())
 			df <- outcome_prescriptions()
 			#setkey(df, patid)
 			results <- df[, list(

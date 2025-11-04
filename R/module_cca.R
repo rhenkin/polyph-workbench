@@ -58,12 +58,18 @@ module_cca_ui <- function(id) {
 									showcase = bs_icon("people-fill")
 								)
 							),
-							card(vegawidgetOutput(ns(
-								"pp_pyramid_plot"
-							))),
-							card(vegawidgetOutput(ns(
-								"mltc_pyramid_plot"
-							)))
+							card(
+								card_header("Polypharmacy burden"),
+								card_body(
+									vegawidgetOutput(ns("pp_pyramid_plot"))
+									)
+								),
+							card(
+								card_header("MLTC burden"),
+								card_body(
+									vegawidgetOutput(ns("mltc_pyramid_plot"))
+									)
+								)
 						),
 						layout_columns(
 							card(full_screen = TRUE,
@@ -74,12 +80,17 @@ module_cca_ui <- function(id) {
 									)
 								),
 							card(full_screen = TRUE,
+									 card_header("Top 10 Long-term conditions"),
+									 card_body(
 									 vegawidgetOutput(
 							ns("topten_ltc_bar_plot")
+									 )
 						)), card(full_screen = TRUE,
+										 card_header("Top 10 Background medications"),
+										 card_body(
 										 vegawidgetOutput(
 							ns("topten_substance_bar_plot")
-						)))
+						))))
 					),
 
 
@@ -245,12 +256,12 @@ module_cca_server <- function(id, prepared_study_data_r = NULL) {
     # Pyramid plots
     output$pp_pyramid_plot <- renderVegawidget({
       req(patient_data_r())
-      create_burden_pyramid(patient_data_r(), "pp", title = "Polypharmacy burden")
+      create_burden_pyramid(patient_data_r(), "pp")
     })
 
     output$mltc_pyramid_plot <- renderVegawidget({
       req(patient_data_r())
-      create_burden_pyramid(patient_data_r(), "n_ltc", title = "MLTC burden")
+      create_burden_pyramid(patient_data_r(), "n_ltc")
     })
 
     # Top substances plot

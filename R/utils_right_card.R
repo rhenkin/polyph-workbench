@@ -7,12 +7,17 @@ bnf_table_server <- function(id, bnf_lookup) {
 	moduleServer(id, function(input, output, session) {
 		ns <- session$ns
 
-		bnf_to_display <- unique(bnf_lookup[BNF_Chemical_Substance != "",.(BNF_Chapter, BNF_Section, BNF_Paragraph, BNF_Chemical_Substance)])
+		bnf_to_display <- reactiveVal()
+		observe({
+			unique_bnf_table <- unique(bnf_lookup[BNF_Chemical_Substance != "",.(BNF_Chapter, BNF_Section, BNF_Paragraph, BNF_Chemical_Substance)])
+			bnf_to_display(unique_bnf_table)
+		}, suspended = TRUE)
+
 
 		observeEvent(input$show_bnf_table, {
 
 			# Get initial chapters
-			chapters <- unique(bnf_to_display$BNF_Chapter)
+			chapters <- unique(bnf_to_display()$BNF_Chapter)
 			chapters <- sort(chapters[!is.na(chapters)])
 
 			showModal(modalDialog(
@@ -138,7 +143,7 @@ bnf_table_server <- function(id, bnf_lookup) {
 				easyClose = TRUE,
 				footer = NULL
 			))
-		})
+		}, suspended = TRUE)
 
 		# Select all sections button
 		observeEvent(input$select_all_sections, {
@@ -154,7 +159,7 @@ bnf_table_server <- function(id, bnf_lookup) {
 				}
 
 				# Get choices from the current selectInput
-				filtered_data <- bnf_to_display[BNF_Chapter %in% input$bnf_chapter]
+				filtered_data <- bnf_to_display()[BNF_Chapter %in% input$bnf_chapter]
 				sections <- unique(filtered_data$BNF_Section)
 				sections <- sort(sections[!is.na(sections)])
 
@@ -171,7 +176,7 @@ bnf_table_server <- function(id, bnf_lookup) {
 			if (!is.null(input$bnf_chapter) && !is.null(input$bnf_section) &&
 					length(input$bnf_chapter) > 0 && length(input$bnf_section) > 0) {
 
-				filtered_data <- bnf_to_display[
+				filtered_data <- bnf_to_display()[
 					BNF_Chapter %in% input$bnf_chapter &
 						BNF_Section %in% input$bnf_section
 				]
@@ -189,7 +194,7 @@ bnf_table_server <- function(id, bnf_lookup) {
 		# Update sections when chapters are selected
 		observeEvent(input$bnf_chapter, {
 			if (!is.null(input$bnf_chapter) && length(input$bnf_chapter) > 0) {
-				filtered_data <- bnf_to_display[BNF_Chapter %in% input$bnf_chapter]
+				filtered_data <- bnf_to_display()[BNF_Chapter %in% input$bnf_chapter]
 				sections <- unique(filtered_data$BNF_Section)
 				sections <- sort(sections[!is.na(sections)])
 
@@ -212,7 +217,7 @@ bnf_table_server <- function(id, bnf_lookup) {
 			if (!is.null(input$bnf_chapter) && !is.null(input$bnf_section) &&
 					length(input$bnf_chapter) > 0 && length(input$bnf_section) > 0) {
 
-				filtered_data <- bnf_to_display[
+				filtered_data <- bnf_to_display()[
 					BNF_Chapter %in% input$bnf_chapter &
 						BNF_Section %in% input$bnf_section
 				]
@@ -228,20 +233,15 @@ bnf_table_server <- function(id, bnf_lookup) {
 			} else {
 				updateSelectInput(session, "bnf_paragraph", choices = NULL, selected = NULL)
 			}
-		})
-
-		# Update substances list when paragraphs are selected
-		observeEvent(input$bnf_paragraph, {
-			# The substances will be automatically updated via renderUI
-			# No need for manual update here since renderUI is reactive
-		})
+		}, suspended = TRUE)
 
 		# Render substances display
 		output$substances_display <- renderUI({
+			req(input$bnf_chapter, input$bnf_section, input$bnf_paragraph)
 			if (!is.null(input$bnf_chapter) && !is.null(input$bnf_section) && !is.null(input$bnf_paragraph) &&
 					length(input$bnf_chapter) > 0 && length(input$bnf_section) > 0 && length(input$bnf_paragraph) > 0) {
 
-				filtered_data <- bnf_to_display[
+				filtered_data <- bnf_to_display()[
 					BNF_Chapter %in% input$bnf_chapter &
 						BNF_Section %in% input$bnf_section &
 						BNF_Paragraph %in% input$bnf_paragraph
@@ -290,7 +290,7 @@ bnf_table_server <- function(id, bnf_lookup) {
 			if (!is.null(input$bnf_chapter) && !is.null(input$bnf_section) && !is.null(input$bnf_paragraph) &&
 					length(input$bnf_chapter) > 0 && length(input$bnf_section) > 0 && length(input$bnf_paragraph) > 0) {
 
-				filtered_data <- bnf_to_display[
+				filtered_data <- bnf_to_display()[
 					BNF_Chapter %in% input$bnf_chapter &
 						BNF_Section %in% input$bnf_section &
 						BNF_Paragraph %in% input$bnf_paragraph

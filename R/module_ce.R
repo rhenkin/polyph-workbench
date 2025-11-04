@@ -9,14 +9,32 @@ module_ce_ui <- function(id) {
 								nav_panel(
 									title = "Overview",
 									layout_columns(
-										col_widths = c(2,5,5),
-										value_box(
-											showcase_layout = showcase_left_center(width = "200px", max_height = "150px"),
-											height = "150px",
-											title = "Cases",
-											value = textOutput(ns("value_box_cases")),
-											theme = "red",
-											showcase = bs_icon("people-fill")
+										col_widths = c(2,4,4),
+										verticalLayout(
+											value_box(
+												showcase_layout = showcase_top_right(width = "200px", max_height = "150px"),
+												height = "150px",
+												title = "Cases",
+												value = textOutput(ns("value_box_cases")),
+												theme = "red",
+												showcase = bs_icon("people-fill")
+											),
+											value_box(
+												showcase_layout = showcase_top_right(width = "200px", max_height = "150px"),
+												height = "150px",
+												title = "Median multimorbidity",
+												value = textOutput(ns("value_box_median_ltc")),
+												theme = "red",
+												showcase = bs_icon("heart-pulse-fill")
+											),
+											value_box(
+												showcase_layout = showcase_top_right(width = "200px", max_height = "150px"),
+												height = "150px",
+												title = "Median polypharmacy",
+												value = textOutput(ns("value_box_median_pp")),
+												theme = "red",
+												showcase = bs_icon("capsule-pill")
+											)
 										),
 										card(
 											card_header("Polypharmacy Distribution"),
@@ -64,6 +82,16 @@ module_ce_server <- function(id,
       	prettyNum(uniqueN(outcome_prescriptions()$patid), big.mark = ",")
       })
 
+      output$value_box_median_ltc <- renderText({
+      	req(outcome_prescriptions())
+      	prettyNum(median(outcome_prescriptions()$n_ltc), big.mark = ",")
+      })
+
+      output$value_box_median_pp <- renderText({
+      	req(pp_groups_data())
+      	prettyNum(median(pp_groups_data()$pp), big.mark = ",")
+      })
+
       output$pp_distribution_plot <- renderVegawidget({
       	req(outcome_prescriptions(), pp_groups_data())
       	create_pp_distribution_plot(
@@ -78,6 +106,8 @@ module_ce_server <- function(id,
       		ltc_data(),
       		outcome_prescriptions(),
       		n_top = 10,
+      		height = 400,
+      		width = "container",
       		title = "Top 10 Long-term Conditions"
       	)
       })
@@ -87,11 +117,11 @@ module_ce_server <- function(id,
       	create_top_substances_plot_ce(
       		outcome_prescriptions(),
       		n_top = 10,
+      		height = 400,
+      		width = "container",
       		title = "Top 10 Substances"
       	)
       })
-
-
 
     module_overview_server(
       id = "overview_module",

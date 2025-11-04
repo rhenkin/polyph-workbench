@@ -30,7 +30,7 @@ module_prescription_explorer_ui <- function(id) {
         							 column(5, numericInput(ns("outcome_age_filter"), label = "Outcome age filter:", value = 100, min = 16, max = 100)),
         							 column(1, textOutput(ns("selected_pats")))),
         			dataTableOutput(ns("presc_by_ltc"))
-        		)),        
+        		)),
         accordion_panel(
         	title = "OR heatmap",
         	value = "or_heatmap_acc",
@@ -44,7 +44,7 @@ module_prescription_explorer_ui <- function(id) {
         	"Polypharmacy transition per substance",
         	div("Column indicates current number of prescriptions before new prescription is added"),
         	dataTableOutput(ns("transition_table"))
-        ),        
+        ),
         accordion_panel(
           "Time to outcome", module_presc_tto_ui(ns("tto_module"))
         ),
@@ -60,15 +60,19 @@ module_prescription_explorer_server <- function(id, outcome_prescriptions, patie
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
-    bnf_lookup_simple <- bnf_lookup[
-        ,
-        .SD[1, .(BNF_Chemical_Substance, BNF_Subparagraph, BNF_Paragraph, BNF_Section, BNF_Chapter)], BNF_Chemical_Substance
-    ] |> unique()
+    #bnf_lookup_simple <- reactiveVal()
+    bnf_lookup_simple <- reactive({
+    	bnf_simple <- bnf_lookup[
+    		,
+    		.SD[1, .(BNF_Chemical_Substance, BNF_Subparagraph, BNF_Paragraph, BNF_Section, BNF_Chapter)], BNF_Chemical_Substance
+    	] |> unique()
+    	bnf_simple
+	   })
 
     subst_pp_df <- reactive({
       df <- outcome_prescriptions()
       validate(need(nrow(df) > 0, "No valid patients found"))
-      prepare_prescription_data(df, bnf_lookup_simple, pp_groups_data(), patient_data(),
+      prepare_prescription_data(df, bnf_lookup_simple(), pp_groups_data(), patient_data(),
                                 input$freq_table_bnf)
     })
 
@@ -108,9 +112,9 @@ module_prescription_explorer_server <- function(id, outcome_prescriptions, patie
 
     output$ltc_dropdown_ui <- renderUI({
         ltcs <- ltc_data()
-        virtualSelectInput(ns("ltc_dropdown"), 
+        virtualSelectInput(ns("ltc_dropdown"),
             label = "Select 1 or more LTCs:",
-            choices = with(ltc_chapters[ltc %in% unique(ltcs$term)], 
+            choices = with(ltc_chapters[ltc %in% unique(ltcs$term)],
             split(ltc, body_system)), multiple = TRUE, search = TRUE)
     })
 
@@ -143,7 +147,7 @@ module_prescription_explorer_server <- function(id, outcome_prescriptions, patie
   	})
 
     output$transition_table <- renderDataTable({
-    	med_data <- copy(subst_pp_df())    	
+    	med_data <- copy(subst_pp_df())
     	setorder(med_data, patid, start_date)
     	level_profiles <- analyze_medications(med_data, mode = "level")
     }, rownames = FALSE)

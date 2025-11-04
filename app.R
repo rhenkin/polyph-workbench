@@ -135,7 +135,7 @@ server <- function(input, output, session) {
 	modal_shown <- reactiveVal(FALSE)
 
 	# Show landing modal on startup
-	observe({
+	observe(priority = 9999, x = {
 		if (!modal_shown()) {
 			showModal(
 				modalDialog(
@@ -191,7 +191,7 @@ server <- function(input, output, session) {
 	})
 
 	# Get patient data directly from data.table
-	patient_df <- gold_patient[, .(patid, sex = gender, eth_group, imd_quintile)]
+	# patient_df <- gold_patient[, .(patid, sex = gender, eth_group, imd_quintile)]
 
 	# Get outcome list directly from data.table
 	outcome_list <- sort(unique(gold_outcomes$outcome))
@@ -214,7 +214,7 @@ server <- function(input, output, session) {
 	)
 
 	patient_data <- reactive({
-		req(patientFilter_r$outcome)
+		req(input$nav_to_outcome_explorer, patientFilter_r$outcome)
 		message("Querying patient data ", Sys.time())
 
 		# Use data.table function instead of database query

@@ -35,7 +35,8 @@ simple_bar_plot <- function(df, y_var, height = 250, width = 300, title = NULL, 
 		),
 		config = list(
 			view = list(stroke = NULL),
-			font = "Lato, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\""
+			font = "Lato, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\"",
+			axis = list(labelFontSize = 12)
 		)
 	)
 	spec
@@ -68,7 +69,7 @@ create_pp_distribution_plot <- function(pp_groups_data, title = "Polypharmacy Di
 #' @param n_top Number of top items to show
 #' @param title Plot title
 #' @return vegaspec object
-create_top_ltcs_plot <- function(ltc_data, outcome_prescriptions, n_top = 10, title = "Top 10 Long-term Conditions") {
+create_top_ltcs_plot <- function(ltc_data, outcome_prescriptions, n_top = 10, height = 250, width = 280, title = "Top 10 Long-term Conditions") {
 	# Filter to patients in outcome_prescriptions
 	valid_patids <- unique(outcome_prescriptions$patid)
 	ltc_filtered <- ltc_data[patid %in% valid_patids]
@@ -85,7 +86,7 @@ create_top_ltcs_plot <- function(ltc_data, outcome_prescriptions, n_top = 10, ti
 	# Truncate long names
 	top_ltcs[nchar(term) > 25, term := paste0(strtrim(term, 25), "...")]
 
-	simple_bar_plot(top_ltcs, "term", height = 250, width = 280, title = title) |>
+	simple_bar_plot(top_ltcs, "term", height = height, width = width, title = title) |>
 		as_vegaspec()
 }
 
@@ -94,7 +95,7 @@ create_top_ltcs_plot <- function(ltc_data, outcome_prescriptions, n_top = 10, ti
 #' @param n_top Number of top items to show
 #' @param title Plot title
 #' @return vegaspec object
-create_top_substances_plot_ce <- function(outcome_prescriptions, n_top = 10, title = "Top 10 Substances") {
+create_top_substances_plot_ce <- function(outcome_prescriptions, n_top = 10, height = 250, width = 280, title = "Top 10 Substances") {
 	# Calculate frequency
 	subst_freq <- outcome_prescriptions[, .(N = uniqueN(patid)), by = substance]
 	total_patients <- uniqueN(outcome_prescriptions$patid)
@@ -107,6 +108,6 @@ create_top_substances_plot_ce <- function(outcome_prescriptions, n_top = 10, tit
 	# Truncate long names
 	top_substances[nchar(substance) > 25, substance := paste0(strtrim(substance, 25), "...")]
 
-	simple_bar_plot(top_substances, "substance", height = 250, width = 280, title = title) |>
+	simple_bar_plot(top_substances, "substance", height = height, width = width, title = title) |>
 		as_vegaspec()
 }

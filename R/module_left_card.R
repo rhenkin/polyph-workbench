@@ -25,6 +25,7 @@ left_card_ui <- function(id) {
 left_card_server <- function(id, patientFilter_r, outcome_list, analyzed_patient_count) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
     updateSelectizeInput(session, "select_outcome", choices = outcome_list)
 
     output$chapter_table <- renderDataTable({
@@ -38,6 +39,7 @@ left_card_server <- function(id, patientFilter_r, outcome_list, analyzed_patient
 		      paging = FALSE,
 		      scrollY = "300px"
     )) })
+	outputOptions(session$output, "chapter_table", suspendWhenHidden = TRUE)
 
     output$selectedPatientInfo <-  renderText({
       # req(analyzed_patient_count() > 0)

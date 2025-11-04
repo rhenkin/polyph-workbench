@@ -10,16 +10,17 @@ middle_card_ui <- function(id) {
 }
 
 #' @export
-middle_card_server <- function(id, prescription_data, ltc_data, patient_data, 
-                              outcome_data, acute_presc_df, min_nltc, 
+middle_card_server <- function(id, prescription_data, ltc_data, patient_data,
+                              outcome_data, acute_presc_df, min_nltc,
                               stored_queries, polypharmacy_threshold, earliest_treatment_end) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
+
     # Data layer - reactive data calculations
     queried_terms <- reactive({ stored_queries$ltc$terms })
-    
+
     outcome_prescriptions <- reactive({
+    	req(prescription_data(), outcome_data(), ltc_data())
       calculate_outcome_prescriptions(
         presc_df = prescription_data(),
         outcome_df = outcome_data(),
@@ -30,7 +31,7 @@ middle_card_server <- function(id, prescription_data, ltc_data, patient_data,
         queried_terms = queried_terms()
       )
     })
-    
+
     acute_outcome_prescriptions <- reactive({
       calculate_acute_outcome_prescriptions(
         outcome_df = outcome_data(),
@@ -39,17 +40,17 @@ middle_card_server <- function(id, prescription_data, ltc_data, patient_data,
         earliest_treatment_end = earliest_treatment_end()
       )
     })
-    
+
     pp_groups_data <- reactive({
       req(outcome_prescriptions())
       calculate_pp_groups(outcome_prescriptions())
     })
-    
+
     selected_outcome <- reactive({
       req(outcome_data())
       unique(outcome_data()$term)
     })
-    
+
     # Module servers
     module_ce_server(
       id = "ce_module",
@@ -61,8 +62,6 @@ middle_card_server <- function(id, prescription_data, ltc_data, patient_data,
       pp_groups_data = pp_groups_data,
       acute_outcome_prescriptions = acute_outcome_prescriptions
     )
-
-
 
     matched_data <- module_ccm_server(
       id = "ccm_module",
