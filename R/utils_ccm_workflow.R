@@ -23,7 +23,8 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 		master_risk_pool = master_risk_pool_dataset,
 		ltc_data = ltc_data,
 		patient_data = patient_data,
-		pred_window = pred_window
+		pred_window = pred_window,
+		patient_filters = patient_filters
 	)
 
 	# Step 2: Get eligible control pool
@@ -61,7 +62,8 @@ build_cases_table <- function(outcome_prescriptions,
 															master_risk_pool,
 															ltc_data,
 															patient_data,
-															pred_window) {
+															pred_window,
+															patient_filters) {
 
 	# Get case patient IDs and outcome dates
 	outcomes <- outcome_prescriptions[, .(patid, outcome_date = eventdate)] |> unique()
@@ -83,7 +85,8 @@ build_cases_table <- function(outcome_prescriptions,
 	# Validate LTCs and calculate multimorbidity date
 	new_cases <- add_multimorbidity_info(
 		cases = new_cases,
-		ltc_data = ltc_data
+		ltc_data = ltc_data,
+		patient_filters = patient_filters
 	)
 
 	# Add demographics and calculate age
@@ -94,6 +97,9 @@ build_cases_table <- function(outcome_prescriptions,
 
 	# Create stratification variables
 	new_cases <- create_stratification_variables(new_cases)
+
+	new_cases[, index_date := prescription_date]
+	new_cases[, prescription_date := NULL]
 
 	return(new_cases)
 }
@@ -132,7 +138,7 @@ filter_cases_by_pred_window <- function(cases_raw, outcomes, pred_window) {
 }
 
 #' Add multimorbidity information (≥2 LTCs before prescription)
-add_multimorbidity_info <- function(cases, ltc_data) {
+add_multimorbidity_info <- function(cases, ltc_data, patient_filters = NULL) {
 	# Get valid LTCs before prescription date
 	valid_ltcs <- cases[ltc_data,
 											.(patid, term, eventdate = i.eventdate, start_date = x.prescription_date),
@@ -142,6 +148,21 @@ add_multimorbidity_info <- function(cases, ltc_data) {
 	]
 
 	setkey(valid_ltcs, patid, eventdate)
+
+	if (!is.null(patient_filters$selected_ltcs)) {
+		# Count how many of the SELECTED LTCs each patient has
+		ltc_counts <- valid_ltcs[term %in% patient_filters$selected_ltcs,
+														 .(n_selected_ltcs = uniqueN(term)),
+														 by = patid]
+
+		# Keep only patients with ALL selected LTCs
+		n_required <- length(patient_filters$selected_ltcs)
+		patids_with_all_ltcs <- ltc_counts[n_selected_ltcs == n_required, patid]
+
+		# Filter both valid_ltcs and cases
+		valid_ltcs <- valid_ltcs[patid %in% patids_with_all_ltcs]
+		cases <- cases[patid %in% patids_with_all_ltcs]
+	}
 
 	# Filter to patients with ≥2 LTCs
 	valid_ltc_patids <- valid_ltcs[, .N, patid][N >= 2, patid]
@@ -258,25 +279,40 @@ filter_eligible_control_pool <- function(cases, master_risk_pool, ltc_data, pati
 		dplyr::collect() |>
 		as.data.table()
 	setkey(eligible_pool, patid)
+	eligible_pool[, prescription_date := as.IDate(prescription_date)]
+	setorder(eligible_pool, patid, prescription_date)
+	eligible_pool <- eligible_pool[
+		,
+		last(.SD),
+		by = .(strata = stratum_first_presc_bin, patid)
+	]
+	message(sprintf("Unique patient-strata combinations: %d", nrow(eligible_pool)))
 
 	if (!is.null(patient_filters$selected_ltcs)) {
+		# Filter LTC data to only selected terms
 		filtered_ltcs <- ltc_data[term %in% patient_filters$selected_ltcs]
-		valid_ltcs <- eligible_pool[filtered_ltcs,
-																	 on = .(patid, prescription_date > eventdate),
-																	 nomatch = 0,
-																	 allow.cartesian = TRUE
+
+		# For each prescription in eligible_pool, find which selected LTCs occurred before it
+		# This creates multiple rows per prescription (one per LTC)
+		prescriptions_with_ltcs <- eligible_pool[filtered_ltcs,
+																						 .(patid, prescription_date = x.prescription_date, term = i.term, ltc_date = i.eventdate),
+																						 on = .(patid, prescription_date > eventdate),
+																						 nomatch = 0,
+																						 allow.cartesian = TRUE
 		]
 
-		patids_with_ltc <- unique(valid_ltcs$patid)
-		eligible_pool <- eligible_pool[patid %in% patids_with_ltc]
+		# Count how many DISTINCT selected LTCs each prescription has before it
+		ltc_per_prescription <- prescriptions_with_ltcs[,
+																										.(n_ltcs_before = uniqueN(term)),
+																										by = .(patid, prescription_date)]
+
+		# Require ALL selected LTCs to be present before the prescription
+		n_required <- length(patient_filters$selected_ltcs)
+		valid_prescriptions <- ltc_per_prescription[n_ltcs_before == n_required,
+																								.(patid, prescription_date)]
+		# Keep only these valid prescriptions in eligible_pool
+		eligible_pool <- eligible_pool[valid_prescriptions, on = .(patid, prescription_date), nomatch = 0, allow.cartesian = TRUE]
 	}
-
-	# Convert date format
-	eligible_pool[, prescription_date := as.IDate(prescription_date)]
-
-	# Exclude case patients
-	# eligible_pool <- eligible_pool[!patid %in% case_patids]
-
 
 	return(eligible_pool)
 }
@@ -289,16 +325,7 @@ filter_eligible_control_pool <- function(cases, master_risk_pool, ltc_data, pati
 #' @return data.table of sampled controls
 sample_controls_by_strata <- function(eligible_pool, cases, match_ratio) {
 
-	# Get unique patient per stratum (most recent prescription)
-	setorder(eligible_pool, patid, prescription_date)
-	eligible_unique <- eligible_pool[
-		,
-		last(.SD),
-		by = .(strata = stratum_first_presc_bin, patid)
-	]
-
-	message(sprintf("Unique patient-strata combinations: %d", nrow(eligible_unique)))
-
+	eligible_unique <- copy(eligible_pool)
 	# Calculate controls needed per stratum
 	strata_needs_dt <- cases[
 		,
@@ -327,6 +354,10 @@ sample_controls_by_strata <- function(eligible_pool, cases, match_ratio) {
 
 	message(sprintf("Controls sampled: %d (unique patients: %d)",
 									nrow(all_controls), uniqueN(all_controls$patid)))
+
+	all_controls[, index_date := prescription_date]
+	all_controls[, prescription_date := NULL]
+
 
 	return(all_controls)
 }

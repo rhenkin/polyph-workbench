@@ -47,7 +47,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 	# ========================================================================
 
 	# Cases: use the filtered outcome_prescriptions
-	cases_presc <- unique(cases[, .(patid, index_date = outcome_date, eventdate = outcome_date, outcome_age = index_age * 365.25)])
+	cases_presc <- unique(cases[, .(patid, index_date, eventdate = outcome_date, index_age_days = index_age * 365.25)])
 	cases_presc <- cases_presc[gold_cp, on = "patid", nomatch = 0][start_date <= index_date & stop_date >= index_date - 84]
 	cases_presc[, treatment := 1]
 
@@ -66,7 +66,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 	# Create structure matching outcome_prescriptions
 	controls_presc[, `:=`(
 		eventdate = index_date,
-		outcome_age = as.numeric(as.IDate(index_date) - as.IDate(dob)),
+		index_age_days = as.numeric(as.IDate(index_date) - as.IDate(dob)),
 		treatment = 0
 	)]
 	controls_presc[, `:=`(dob = NULL, index_date = NULL)]
@@ -75,8 +75,8 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
     # debug_dt_for_rbind(cases_presc[, .(patid, eventdate, outcome_age, substance, start_date, stop_date, duration, treatment)], "cases_presc")
     # debug_dt_for_rbind(controls_presc[, .(patid, eventdate, outcome_age, substance, start_date, stop_date, duration, treatment)], "controls_presc")
 	all_prescriptions <- rbindlist(list(
-		cases_presc[, .(patid, eventdate, outcome_age, substance, start_date, stop_date, duration, treatment)],
-		controls_presc[, .(patid, eventdate, outcome_age, substance, start_date, stop_date, duration, treatment)]
+		cases_presc[, .(patid, eventdate, index_age_days, substance, start_date, stop_date, duration, treatment)],
+		controls_presc[, .(patid, eventdate, index_age_days, substance, start_date, stop_date, duration, treatment)]
 	), fill = TRUE)
 	all_prescriptions[, study_name := study_name]
     setkey(all_prescriptions, patid)
@@ -103,19 +103,14 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 	# ========================================================================
 
 	# Cases: get all LTC data before their outcome
-	cases_index <- unique(cases[, .(patid, index_date = outcome_date)])
-	cases_ltc <- cases_index[gold_ltc, on = "patid", nomatch = 0][
-		eventdate < index_date
-	]
+	cases_index <- unique(cases[, .(patid, index_date)])
+	cases_ltc <- cases_index[gold_ltc, .(patid, eventdate, age_days, term), on = .(patid, index_date > eventdate), nomatch = 0]
+
 	cases_ltc[, treatment := 1]
-	cases_ltc[, index_date := NULL]
 
 	# Controls: get LTC data before their control index date
-	controls_ltc <- control_index_lookup[gold_ltc, on = "patid", nomatch = 0][
-		eventdate < index_date
-	]
+	controls_ltc <- control_index_lookup[gold_ltc, .(patid, eventdate, age_days, term), on = .(patid, index_date > eventdate), nomatch = 0]
 	controls_ltc[, treatment := 0]
-	controls_ltc[, index_date := NULL]
 
 	# Combine LTC data
     # debug_dt_for_rbind(cases_ltc[, .(patid, eventdate, age_days, term, treatment)], "cases_ltc")
@@ -135,7 +130,8 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 	# Cases
 	matched_cases <- cases[, .(
 		patid,
-		index_date = outcome_date,
+		index_date,
+		outcome_date,
 		substance,
 		treatment = 1,
 		study_name = study_name
@@ -145,6 +141,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 	matched_controls <- controls[, .(
 		patid,
 		index_date = control_index_date,
+		outcome_date = NA,
 		substance,
 		treatment = 0,
 		study_name = study_name
@@ -220,69 +217,6 @@ save_matched_datasets <- function(study_name, cases, controls, gold_patient, gol
 									study_data$metadata$matching_ratio_total))
 
 	invisible(study_data)
-}
-
-compute_eligible_controls_core_new <- function(cases_df, gold_patient, gold_ltc, random_seed = 4) {
-	# Set random seed for reproducibility
-	set.seed(random_seed)
-
-	# Get case patient IDs and age range
-	case_patids <- unique(cases_df$patid)
-	cases_with_age <- merge(cases_df, gold_patient[, .(patid, dob)], by = "patid")
-	cases_with_age[, outcome_age := as.numeric(as.IDate(eventdate) - as.IDate(dob))]
-
-	min_case_age <- min(cases_with_age$outcome_age)
-	max_case_age <- max(cases_with_age$outcome_age)
-
-	# Get all potential controls - vectorized filtering
-	all_controls <- gold_patient[!patid %in% case_patids]
-
-	# Calculate age range dates for all controls at once
-	all_controls[, `:=`(
-		min_age_date = as.IDate(dob) + min_case_age,
-		max_age_date = as.IDate(dob) + max_case_age
-	)]
-
-	# Vectorized eligibility check
-	eligible_controls <- all_controls[
-		# Patient was alive during potential age range
-		(is.na(dod) | as.IDate(dod) > min_age_date) &
-			(is.na(tod) | as.IDate(tod) > min_age_date) &
-			# Age range overlaps with study period
-			min_age_date <= as.IDate("2020-12-31") &
-			max_age_date >= as.IDate("2005-01-01")
-	]
-
-	# Assign random ages and calculate index dates - vectorized
-	set.seed(random_seed)
-	eligible_controls[, assigned_age := sample(min_case_age:max_case_age, .N, replace = TRUE)]
-	eligible_controls[, index_date := as.IDate(dob) + assigned_age]
-
-	# Final validation - vectorized
-	valid_controls <- eligible_controls[
-		(is.na(dod) | index_date < as.IDate(dod)) &
-			(is.na(tod) | index_date < as.IDate(tod)) &
-			index_date >= as.IDate("2005-01-01") &
-			index_date <= as.IDate("2020-12-31"),
-		.(patid, index_date)
-	]
-
-	# Rest of the function remains the same...
-	setkey(valid_controls, patid)
-	setkey(gold_ltc, patid)
-
-	controls_ltc <- gold_ltc[valid_controls, on = "patid", nomatch = 0][
-		eventdate < index_date
-	]
-
-	ltc_counts <- controls_ltc[, .(n_ltc_terms = uniqueN(term)), by = .(patid, index_date)]
-	controls_with_valid_ltc <- ltc_counts[n_ltc_terms >= 2, .(patid, index_date)]
-
-	controls_with_terms <- controls_ltc[controls_with_valid_ltc, on = c("patid", "index_date"), nomatch = 0][
-		, .(patid, index_date, term)
-	]
-
-	return(controls_with_terms)
 }
 
 compute_eligible_controls_core <- function(cases_df, gold_patient, gold_ltc, gold_cp, random_seed = 4) {
