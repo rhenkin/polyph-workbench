@@ -79,14 +79,6 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 			df3 <- patient_data()
 			df <- merge(df1[df2,], df3, by = "patid", all.x = TRUE, all.y = FALSE)
 			df <- df[patid %in% df3$patid]
-			# df$age <- df$age_days/365.25
-			# breaks <- c(0,44,64,84,Inf)
-			# labels <- c("<=44", "45-64", "65-84", "85+")
-			# df[, age_group := cut(round(age_days/365.25, digits = 0),
-			# 											breaks = breaks,
-			# 											labels = labels,
-			# 											include.lowest = FALSE,
-			# 											ordered_result = TRUE,)]
 
 			df[,age_first_prescription := (first_prescription - dob)]
 			df[, first_prescription_age_group := cut(age_first_prescription/365.25,

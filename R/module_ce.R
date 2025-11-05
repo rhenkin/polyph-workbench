@@ -8,9 +8,12 @@ module_ce_ui <- function(id) {
 							navset_tab(
 								nav_panel(
 									title = "Overview",
-									layout_columns(
-										col_widths = c(2,4,4),
-										verticalLayout(
+									conditionalPanel(condition = "output.data_loaded == null", ns = ns,
+																	 div("Select an outcome, patient filters and click 'Start analysis' to begin",
+																	 		class = "mt-4 p-5 h4 border rounded")),
+									conditionalPanel(condition = "output.data_loaded == true", ns = ns,
+										layout_columns(
+											col_widths = c(3,3,3,3),
 											value_box(
 												showcase_layout = showcase_top_right(width = "200px", max_height = "150px"),
 												height = "150px",
@@ -22,10 +25,20 @@ module_ce_ui <- function(id) {
 											value_box(
 												showcase_layout = showcase_top_right(width = "200px", max_height = "150px"),
 												height = "150px",
+												title = "Median age",
+												value = textOutput(ns("value_box_median_age")),
+												theme = "red",
+												showcase = bs_icon("person-lines-fill"),
+												p("years")
+											),
+											value_box(
+												showcase_layout = showcase_top_right(width = "200px", max_height = "150px"),
+												height = "150px",
 												title = "Median multimorbidity",
 												value = textOutput(ns("value_box_median_ltc")),
 												theme = "red",
-												showcase = bs_icon("heart-pulse-fill")
+												showcase = bs_icon("heart-pulse-fill"),
+												p("long-term conditions")
 											),
 											value_box(
 												showcase_layout = showcase_top_right(width = "200px", max_height = "150px"),
@@ -33,25 +46,26 @@ module_ce_ui <- function(id) {
 												title = "Median polypharmacy",
 												value = textOutput(ns("value_box_median_pp")),
 												theme = "red",
-												showcase = bs_icon("capsule-pill")
+												showcase = bs_icon("capsule-pill"),
+												p("concurrent medications")
 											)
 										),
-										card(
-											card_header("Polypharmacy Distribution"),
-											vegawidgetOutput(ns("pp_distribution_plot"), width = 300)
-										),
-										card(
-											card_header("Top 10 Long-term Conditions"),
-											vegawidgetOutput(ns("top_ltcs_plot"), , width = 300)
-										)),
-
 										layout_columns(
-											col_widths = c(4, 8),
+											col_widths = c(3,4,4),
+											card(
+												card_header("Polypharmacy Distribution"),
+												vegawidgetOutput(ns("pp_distribution_plot")) #, width = 300)
+											),
+											card(
+												card_header("Top 10 Long-term Conditions"),
+												vegawidgetOutput(ns("top_ltcs_plot")) # , width = 300)
+											),
 											card(
 												card_header("Top 10 Substances"),
 												vegawidgetOutput(ns("top_substances_plot"))
 											)
 										)
+									)
 								),
 								nav_panel(
 									title = "Advanced",
@@ -76,10 +90,21 @@ module_ce_server <- function(id,
     function(input, output, session) {
       ns <- session$ns
 
+      output$data_loaded <- reactive({
+      	req(outcome_prescriptions())
+      	!is.null(selected_outcome())
+      })
+      outputOptions(output, "data_loaded", suspendWhenHidden = FALSE)
+
       # Overview tab outputs
       output$value_box_cases <- renderText({
       	req(outcome_prescriptions())
       	prettyNum(uniqueN(outcome_prescriptions()$patid), big.mark = ",")
+      })
+
+      output$value_box_median_age <- renderText({
+      	req(outcome_prescriptions())
+      	prettyNum(median(round(outcome_prescriptions()$outcome_age/365.25, digits = 0)), big.mark = ",")
       })
 
       output$value_box_median_ltc <- renderText({
@@ -96,6 +121,7 @@ module_ce_server <- function(id,
       	req(outcome_prescriptions(), pp_groups_data())
       	create_pp_distribution_plot(
       		pp_groups_data(),
+      		width = "container",
       		title = "Polypharmacy Distribution"
       	)
       })

@@ -103,11 +103,79 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 
 
     # Render tables
+    # output$ltc_freq_table <- renderReactable({
+    #   table_data <- create_prevalence_ratio_table(ltc_freq_df(), "term")
+    #   colnames(table_data) <- c("Condition", "Cases (%)", "Controls (%)", "Case/Control Ratio")
+    #   reactable(table_data[order(-`Case/Control Ratio`)],
+    #   					showPageInfo = FALSE, defaultPageSize = 15)
+    # })
     output$ltc_freq_table <- renderReactable({
-      table_data <- create_prevalence_ratio_table(ltc_freq_df(), "term")
-      colnames(table_data) <- c("Condition", "Cases (%)", "Controls (%)", "Case/Control Ratio")
-      reactable(table_data[order(-`Case/Control Ratio`)],
-      					showPageInfo = FALSE, defaultPageSize = 15)
+    	# Get the underlying data with group information for OR calculation
+    	ltcs <- ltcs_r()
+    	patient_data <- patient_data_r()
+    	strat_var <- input$ltc_freq_strat_variable
+
+    	# Apply same stratification filter
+    	if (strat_var != "") {
+    		parts <- strsplit(strat_var, "#")[[1]]
+    		column_name <- parts[1]
+    		filter_value <- parts[2]
+    		selected_patids <- patient_data[get(column_name) == filter_value, patid]
+    		ltcs <- ltcs[patid %in% selected_patids]
+    	}
+
+    	# Calculate with ORs
+    	table_data <- create_prevalence_ratio_table(
+    		ltc_freq_df(),
+    		"term",
+    		data_with_group = ltcs,  # Pass the data for OR calculation
+    		calculate_or = TRUE
+    	)
+
+    	# Update column names to include OR columns
+    	or_cols <- c("Condition", "Cases (%)", "Controls (%)",
+    							 "OR", "OR_CI_lower", "OR_CI_upper")
+
+    	if (all(c("OR", "p_value", "p_adj") %in% colnames(table_data))) {
+    		colnames(table_data) <- c(or_cols, "p_value", "p_adj")
+
+    		# Create reactable with expandable details for p-values
+    		reactable(
+    			table_data,
+    			columns = list(
+    				p_value = colDef(show = FALSE),
+    				p_adj = colDef(show = FALSE)
+    			),
+    			details = function(index) {
+    				p_val <- table_data[index, p_value]
+    				p_adj_val <- table_data[index, p_adj]
+    				if (is.na(p_val) & is.na(p_adj_val)) return(NULL)
+
+    				htmltools::div(
+    					style = "padding: 16px",
+    					htmltools::tags$b("Statistical Testing:"),
+    					htmltools::tags$div(
+    						style = "margin-top: 8px",
+    						sprintf("Raw p-value: %.4f", p_val)
+    					),
+    					htmltools::tags$div(
+    						sprintf("Adjusted p-value: %.4f", p_adj_val)
+    					),
+    					htmltools::tags$div(
+    						style = "margin-top: 8px; font-style: italic; color: #666;",
+    						if (p_adj_val < 0.05) "Statistically significant (p < 0.05)" else "Not significant"
+    					)
+    				)
+    			},
+    			showPageInfo = FALSE,
+    			defaultPageSize = 15
+    		)
+    	} else {
+    		# Fallback if OR calculation failed
+    		colnames(table_data) <- c("Condition", "Cases (%)", "Controls (%)", "Case/Control Ratio")
+    		reactable(table_data[order(-`Case/Control Ratio`)],
+    							showPageInfo = FALSE, defaultPageSize = 15)
+    	}
     })
 
     # Presc dropdown
@@ -191,11 +259,79 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
     	calculate_frequency_stats(presc, "substance")
     })
 
+    # output$presc_freq_table <- renderReactable({
+    #   table_data <- create_prevalence_ratio_table_old(presc_freq_df(), "substance")
+    #   colnames(table_data) <- c("Substance", "Cases (%)", "Controls (%)", "Case/Control Ratio")
+    #   reactable(table_data[order(-`Case/Control Ratio`)],
+    #   					showPageInfo = FALSE, defaultPageSize = 15)
+    # })
     output$presc_freq_table <- renderReactable({
-      table_data <- create_prevalence_ratio_table(presc_freq_df(), "substance")
-      colnames(table_data) <- c("Substance", "Cases (%)", "Controls (%)", "Case/Control Ratio")
-      reactable(table_data[order(-`Case/Control Ratio`)],
-      					showPageInfo = FALSE, defaultPageSize = 15)
+    	# Get the underlying data with group information for OR calculation
+    	presc <- prescriptions_r()
+    	patient_data <- patient_data_r()
+    	strat_var <- input$presc_freq_strat_variable
+
+    	# Apply same stratification filter
+    	if (strat_var != "") {
+    		parts <- strsplit(strat_var, "#")[[1]]
+    		column_name <- parts[1]
+    		filter_value <- parts[2]
+    		selected_patids <- patient_data[get(column_name) == filter_value, patid]
+    		presc <- presc[patid %in% selected_patids]
+    	}
+
+    	# Calculate with ORs
+    	table_data <- create_prevalence_ratio_table(
+    		presc_freq_df(),
+    		"substance",
+    		data_with_group = presc,  # Pass the data for OR calculation
+    		calculate_or = TRUE
+    	)
+
+    	# Update column names to include OR columns
+    	or_cols <- c("Substance", "Cases (%)", "Controls (%)",
+    							 "OR", "OR_CI_lower", "OR_CI_upper")
+
+    	if (all(c("OR", "p_value", "p_adj") %in% colnames(table_data))) {
+    		colnames(table_data) <- c(or_cols, "p_value", "p_adj")
+
+    		# Create reactable with expandable details for p-values
+    		reactable(
+    			table_data,
+    			columns = list(
+    				p_value = colDef(show = FALSE),
+    				p_adj = colDef(show = FALSE)
+    			),
+    			details = function(index) {
+    				p_val <- table_data[index, p_value]
+    				p_adj_val <- table_data[index, p_adj]
+    				if (is.na(p_val) & is.na(p_adj_val)) return(NULL)
+
+    				htmltools::div(
+    					style = "padding: 16px",
+    					htmltools::tags$b("Statistical Testing:"),
+    					htmltools::tags$div(
+    						style = "margin-top: 8px",
+    						sprintf("Raw p-value: %.4f", p_val)
+    					),
+    					htmltools::tags$div(
+    						sprintf("Adjusted p-value: %.4f", p_adj_val)
+    					),
+    					htmltools::tags$div(
+    						style = "margin-top: 8px; font-style: italic; color: #666;",
+    						if (p_adj_val < 0.05) "Statistically significant (p < 0.05)" else "Not significant"
+    					)
+    				)
+    			},
+    			showPageInfo = FALSE,
+    			defaultPageSize = 15
+    		)
+    	} else {
+    		# Fallback if OR calculation failed
+    		colnames(table_data) <- c("Substance", "Cases (%)", "Controls (%)", "Case/Control Ratio")
+    		reactable(table_data[order(-`Case/Control Ratio`)],
+    							showPageInfo = FALSE, defaultPageSize = 15)
+    	}
     })
 
     # LTC dropdown

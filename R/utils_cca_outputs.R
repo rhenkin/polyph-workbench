@@ -90,7 +90,7 @@ create_top_conditions_plot <- function(freq_data, n_top = 10, title = NULL) {
 #' @param item_col Name of the item column
 #' @param min_pct Minimum prevalence threshold
 #' @return data.table in wide format with ratios
-create_prevalence_ratio_table <- function(freq_data, item_col, min_pct = 0.5) {
+create_prevalence_ratio_table_old <- function(freq_data, item_col, min_pct = 0.5) {
   table_data_wide <- dcast(freq_data,
     as.formula(paste(item_col, "~ group")),
     value.var = "pct",
@@ -101,6 +101,150 @@ create_prevalence_ratio_table <- function(freq_data, item_col, min_pct = 0.5) {
   table_data_wide[, ratio := round(case / control, digits = 2)]
 
   table_data_wide
+}
+
+#' Enhanced Create wide prevalence table with ratios and odds ratios
+#'
+#' This is an enhanced version of create_prevalence_ratio_table that adds
+#' vectorized odds ratio calculations using the fast method from the OR heatmaps.
+#'
+#' @param freq_data Frequency data with group, item, and pct columns
+#' @param item_col Name of the item column
+#' @param min_pct Minimum prevalence threshold
+#' @param data_with_group Optional: Original data.table with patid, group, and item_col for OR calculation
+#' @param calculate_or Logical: whether to calculate odds ratios (requires data_with_group)
+#' @param test_method Test method for p-values: "chisq" or "fisher"
+#' @param p_adjust_method P-value adjustment method (default: "BH")
+#' @return data.table in wide format with ratios and optionally ORs with CIs and p-values
+#'
+#' @details
+#' This function enhances the basic prevalence ratio calculation with:
+#' - Vectorized odds ratio calculation (same method as OR heatmaps)
+#' - Confidence intervals for odds ratios
+#' - Statistical significance testing (chi-square or Fisher's exact)
+#' - Multiple testing correction
+#' - Significance markers (asterisks for p_adj < 0.05)
+#'
+#' @examples
+#' # Basic usage with just prevalence ratios (old behavior)
+#' result <- create_prevalence_ratio_table(freq_data, "term", min_pct = 0.5)
+#'
+#' # Enhanced usage with odds ratios
+#' result <- create_prevalence_ratio_table(
+#'   freq_data, "term", min_pct = 0.5,
+#'   data_with_group = ltcs_data,  # Must include patid, group, and term columns
+#'   calculate_or = TRUE
+#' )
+create_prevalence_ratio_table <- function(freq_data, item_col, min_pct = 0.5,
+																					data_with_group = NULL,
+																					calculate_or = TRUE,
+																					test_method = "chisq",
+																					p_adjust_method = "BH") {
+	# Create wide format table (original behavior)
+	table_data_wide <- dcast(freq_data,
+													 as.formula(paste(item_col, "~ group")),
+													 value.var = "pct",
+													 fill = 0
+	)
+
+	table_data_wide <- table_data_wide[case > min_pct & control > min_pct]
+
+	if (!calculate_or)
+	table_data_wide[, ratio := round(case / control, digits = 2)]
+
+	# Add odds ratio calculation if requested and data is provided
+	if (calculate_or && !is.null(data_with_group)) {
+		# Get case and control patient IDs
+		case_patids <- unique(data_with_group[group == "case", patid])
+		control_patids <- unique(data_with_group[group == "control", patid])
+		n_case <- length(case_patids)
+		n_control <- length(control_patids)
+
+		# Get items (substances or terms)
+		items <- table_data_wide[[item_col]]
+
+		# Build case matrix - vectorized patient x item matrix
+		case_data <- data_with_group[patid %in% case_patids & get(item_col) %in% items]
+		case_matrix <- dcast(case_data, patid ~ get(item_col),
+												 fun.aggregate = function(x) as.integer(length(x) > 0),
+												 value.var = "patid")
+		case_matrix[, patid := NULL]
+		case_matrix <- as.matrix(case_matrix)
+
+		# Build control matrix - vectorized patient x item matrix
+		control_data <- data_with_group[patid %in% control_patids & get(item_col) %in% items]
+		control_matrix <- dcast(control_data, patid ~ get(item_col),
+														fun.aggregate = function(x) as.integer(length(x) > 0),
+														value.var = "patid")
+		control_matrix[, patid := NULL]
+		control_matrix <- as.matrix(control_matrix)
+
+		# Vectorized calculation of 2x2 contingency table cells for ALL items at once
+		# This is the fast method from the OR heatmaps!
+		item_case <- as.numeric(colSums(case_matrix))          # a: has item AND is case
+		item_control <- as.numeric(colSums(control_matrix))    # b: has item AND is control
+		no_item_case <- as.numeric(n_case) - item_case         # c: no item AND is case
+		no_item_control <- as.numeric(n_control) - item_control # d: no item AND is control
+
+		# Vectorized OR calculation: OR = (a * d) / (b * c)
+		# Only calculate where all cells are > 0 to avoid division by zero
+		valid <- (item_case > 0) & (item_control > 0) & (no_item_case > 0) & (no_item_control > 0)
+		or <- rep(NA_real_, length(items))
+		or[valid] <- (item_case[valid] * no_item_control[valid]) / (item_control[valid] * no_item_case[valid])
+
+		# Vectorized CI calculation using log method
+		ci_lower <- rep(NA_real_, length(items))
+		ci_upper <- rep(NA_real_, length(items))
+
+		if (any(valid)) {
+			log_or <- log(or[valid])
+			se_log_or <- sqrt(1/item_case[valid] + 1/item_control[valid] +
+													1/no_item_case[valid] + 1/no_item_control[valid])
+			ci_lower[valid] <- exp(log_or - 1.96 * se_log_or)
+			ci_upper[valid] <- exp(log_or + 1.96 * se_log_or)
+		}
+
+		# Add OR and CI columns to result
+		table_data_wide[, OR := round(or, 2)]
+		table_data_wide[, OR_CI_lower := round(ci_lower, 2)]
+		table_data_wide[, OR_CI_upper := round(ci_upper, 2)]
+
+		# Calculate p-values
+		if (test_method == "fisher") {
+			# Fisher test needs to be row-by-row (slower but exact for small samples)
+			p_values <- sapply(seq_along(items), function(i) {
+				contingency <- matrix(c(item_case[i], item_control[i],
+																no_item_case[i], no_item_control[i]), nrow = 2)
+				fisher.test(contingency)$p.value
+			})
+			table_data_wide[, p_value := p_values]
+
+		} else if (test_method == "chisq") {
+			# Fully vectorized chi-square test - VERY FAST!
+			n_total <- n_case + n_control
+			row1_total <- item_case + item_control          # total with item
+			row2_total <- no_item_case + no_item_control    # total without item
+			col1_total <- item_case + no_item_case          # = n_case
+			col2_total <- item_control + no_item_control    # = n_control
+
+			# Chi-square statistic: X^2 = n(ad - bc)^2 / [(a+b)(c+d)(a+c)(b+d)]
+			chisq_stat <- (n_total * (item_case * no_item_control - item_control * no_item_case)^2) /
+				(row1_total * row2_total * col1_total * col2_total)
+
+			# P-value from chi-square distribution with df=1
+			p_values <- pchisq(chisq_stat, df = 1, lower.tail = FALSE)
+			table_data_wide[, p_value := p_values]
+		}
+
+		# Adjust for multiple testing (vectorized)
+		table_data_wide[, p_adj := p.adjust(p_value, method = p_adjust_method)]
+		table_data_wide[, p_adj := round(p_adj, 4)]
+
+		# Add asterisk to significant items (p_adj < 0.05)
+		table_data_wide[p_adj < 0.05, (item_col) := paste0(get(item_col), "*")]
+	}
+
+	return(table_data_wide)
 }
 
 #' Format and prepare stratification choices for UI

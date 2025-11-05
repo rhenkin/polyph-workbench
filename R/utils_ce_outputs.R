@@ -47,7 +47,7 @@ simple_bar_plot <- function(df, y_var, height = 250, width = 300, title = NULL, 
 #' @param pp_groups_data data.table with PP groups
 #' @param title Plot title
 #' @return vegaspec object
-create_pp_distribution_plot <- function(pp_groups_data, title = "Polypharmacy Distribution") {
+create_pp_distribution_plot <- function(pp_groups_data, height = 250, width = 280, title = "Polypharmacy Distribution") {
 	pp_dist <- pp_groups_data[, .N, by = pp_group]
 	total <- sum(pp_dist$N)
 	pp_dist[, pct := round(N / total * 100, 2)]
@@ -56,7 +56,7 @@ create_pp_distribution_plot <- function(pp_groups_data, title = "Polypharmacy Di
 		pp_dist,
 		"pp_group",
 		height = 250,
-		width = 280,
+		width = width,
 		title = title,
 		sort_values = list("2-4", "5-9", "10+")
 	) |>
