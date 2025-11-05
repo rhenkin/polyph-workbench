@@ -8,10 +8,11 @@ module_cca_prevalence_ui <- function(id) {
       value = "ltc_prev_tables",
       navset_tab(
         nav_panel(
-          "Group prevalences",
+          "Prevalence table",
+          p("Click on a column name to reorder table"),
           virtualSelectInput(
             ns("ltc_freq_strat_variable"),
-            label = "Select a subset (optional):",
+            label = "Select a subset of patients (optional):",
             choices = NULL,
             autoSelectFirstOption = FALSE,
             search = FALSE,
@@ -40,10 +41,11 @@ module_cca_prevalence_ui <- function(id) {
       value = "presc_prev_tables",
       navset_tab(
         nav_panel(
-          "Group prevalences",
+          "Prevalence table",
+          p("Click on a column name to reorder table"),
           virtualSelectInput(
             ns("presc_freq_strat_variable"),
-            label = "Select a subset (optional):",
+            label = "Select a subset of patients (optional):",
             choices = NULL,
             autoSelectFirstOption = FALSE,
             search = FALSE,
@@ -128,8 +130,7 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
     	table_data <- create_prevalence_ratio_table(
     		ltc_freq_df(),
     		"term",
-    		data_with_group = ltcs,  # Pass the data for OR calculation
-    		calculate_or = TRUE
+    		data_with_group = ltcs
     	)
 
     	# Update column names to include OR columns
@@ -284,8 +285,7 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
     	table_data <- create_prevalence_ratio_table(
     		presc_freq_df(),
     		"substance",
-    		data_with_group = presc,  # Pass the data for OR calculation
-    		calculate_or = TRUE
+    		data_with_group = presc
     	)
 
     	# Update column names to include OR columns
