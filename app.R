@@ -372,7 +372,8 @@ server <- function(input, output, session) {
 		min_nltc = patientFilter_r$input_list$min_nltc,
 		stored_queries = stored_queries,
 		polypharmacy_threshold = right_card_inputs$polypharmacy_threshold,
-		earliest_treatment_end = right_card_inputs$earliest_treatment_end
+		earliest_treatment_end = right_card_inputs$earliest_treatment_end,
+		patient_filter = patientFilter_r
 	)
 
 	# Update analyzed patient count when outcome_prescriptions changes

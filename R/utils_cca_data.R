@@ -3,19 +3,19 @@
 #' @return List containing patient_data, prescriptions, ltcs, and cases_controls
 load_cca_dataset <- function(dataset_path) {
   saved_dataset_data <- readRDS(dataset_path)
-  
+
   matched_patids <- saved_dataset_data$matched_patids
   matched_patids[, group := ifelse(treatment == 1, "case", "control")]
-  
+
   patient_data <- saved_dataset_data$all_patient_data
   setkey(patient_data, patid)
-  
+
   prescriptions <- unique(saved_dataset_data$all_prescriptions)
   setkey(prescriptions, patid, start_date, substance)
-  
+
   ltcs <- unique(saved_dataset_data$all_ltc)
   setkey(ltcs, patid, eventdate, term)
-  
+
   list(
     matched_patids = matched_patids,
     patient_data = patient_data,
@@ -32,22 +32,22 @@ load_cca_dataset <- function(dataset_path) {
 #' @return List with filtered prescriptions and ltcs
 filter_by_index_date <- function(prescriptions, ltcs, matched_patids, lookback_days = 84) {
   umatched_patids <- unique(matched_patids[, .(patid, index_date, group)])
-  
-  ltcs_filtered <- ltcs[umatched_patids, 
+
+  ltcs_filtered <- ltcs[umatched_patids,
     .(patid, eventdate, age_days, term, group),
-    on = .(patid, eventdate < index_date), 
+    on = .(patid, eventdate < index_date),
     nomatch = 0
   ]
-  
+
   presc_filtered <- prescriptions[umatched_patids,
-    .(patid, substance = x.substance, index_date = index_date, 
+    .(patid, substance = x.substance, index_date = index_date,
       start_date = x.start_date, stop_date = x.stop_date, duration, group),
-    on = .(patid, start_date <= index_date), 
+    on = .(patid, start_date <= index_date),
     nomatch = 0
   ]
-  
+
   presc_filtered <- presc_filtered[stop_date >= index_date - lookback_days]
-  
+
   list(prescriptions = presc_filtered, ltcs = ltcs_filtered)
 }
 
@@ -65,7 +65,7 @@ add_burden_groups <- function(patient_data, prescriptions, ltcs) {
     value_col = "pp",
     group_col = "pp_group"
   )
-  
+
   ltcs_n <- ltcs[, list(n_ltc = .N), patid]
   ltcs_n <- create_value_groups(
     ltcs_n,
@@ -74,10 +74,10 @@ add_burden_groups <- function(patient_data, prescriptions, ltcs) {
     value_col = "n_ltc",
     group_col = "mltc_group"
   )
-  
+
   patient_data <- patient_data[prescriptions_n]
   patient_data <- patient_data[ltcs_n]
-  
+
   patient_data
 }
 
@@ -103,11 +103,11 @@ calculate_case_control_ratios <- function(freq_data, item_col, min_case_pct = 1)
     case_pct = pct[group == "case"],
     control_pct = pct[group == "control"]
   ), by = item_col]
-  
+
   ratios[, `:=`(
     ratio = case_pct / control_pct,
     diff = case_pct - control_pct
   )]
-  
+
   ratios[case_pct >= min_case_pct]
 }

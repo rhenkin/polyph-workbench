@@ -57,6 +57,7 @@ module_ccm_ui <- function(id) {
 }
 
 module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
+															patient_filter,
 															study_dir = "studies") {
 	moduleServer(id, function(input, output, session) {
 		ns <- session$ns
@@ -78,6 +79,7 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 			req(input$study_name)
 			req(outcome_prescriptions())
 			req(master_risk_pool_dataset())
+			req(patient_filter)
 
 			# Show progress
 			progress <- Progress$new()
@@ -94,7 +96,8 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 					ltc_data = ltc_data(),
 					pred_window = input$pred_window,
 					match_ratio = input$match_ratio,
-					progress = progress
+					progress = progress,
+					patient_filters = patient_filter
 				)
 
 				# Store results
@@ -163,7 +166,7 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 				spec |> as_vegaspec()
 
 			})
-		}, suspended = TRUE)
+		})
 
 		# Prepare study data in memory when matching completes
 		observe({
@@ -186,7 +189,7 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 			}, error = function(e) {
 				message("Error preparing study data: ", e$message)
 			})
-		}, suspended = TRUE)
+		})
 
 		# Save study
 		observeEvent(input$save_study, {

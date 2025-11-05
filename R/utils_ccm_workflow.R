@@ -13,7 +13,8 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 																					 ltc_data,
 																					 pred_window = 30,
 																					 match_ratio = 4,
-																					 progress) {
+																					 progress,
+																					 patient_filters = NULL) {
 
 	# Step 1: Build cases table
 	progress$set(message = "Filtering prescription risk table", value = 0.2, detail = "Building cases table")
@@ -29,7 +30,9 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 	progress$set(message = "Filtering prescription risk table", value = 0.5, detail= "Finding required controls")
 	eligible_pool <- filter_eligible_control_pool(
 		cases = cases,
-		master_risk_pool = master_risk_pool_dataset
+		master_risk_pool = master_risk_pool_dataset,
+		ltc_data = ltc_data,
+		patient_filters = patient_filters
 	)
 
 	# Step 3: Sample controls
@@ -195,27 +198,81 @@ create_stratification_variables <- function(cases) {
 #' @param cases data.table of cases with strata
 #' @param master_risk_pool Arrow dataset
 #' @return data.table of eligible control pool
-filter_eligible_control_pool <- function(cases, master_risk_pool) {
+filter_eligible_control_pool <- function(cases, master_risk_pool, ltc_data, patient_filters = NULL) {
 
 	case_patids <- unique(cases$patid)
 	strata_needs <- unique(cases$strata)
 
 	# Use Arrow to filter before collecting
-	eligible_pool <- master_risk_pool %>%
-		dplyr::filter(stratum_first_presc_bin %in% strata_needs) %>%
+	eligible_pool <- master_risk_pool |>
+		dplyr::filter(!patid %in% case_patids) |>
+		dplyr::filter(stratum_first_presc_bin %in% strata_needs)
+
+	# Apply patient filters if provided
+	if (!is.null(patient_filters)) {
+		input_list <- patient_filters$input_list
+
+		if (!is.null(patient_filters$selected_ltcs)) {
+
+			patids_with_ltc <- ltc_data[term %in% patient_filters$selected_ltcs, patid]
+			eligible_pool <- eligible_pool |>
+				dplyr::filter(patid %in% patids_with_ltc)
+			message(sprintf("Filtering controls by LTC: %s",
+											paste(patient_filters$selected_ltcs, collapse = ", ")))
+		}
+
+		# Filter by minimum number of LTCs
+		if (!is.null(input_list$min_nltc) && input_list$min_nltc > 0) {
+			eligible_pool <- eligible_pool |>
+				dplyr::filter(n_ltcs >= input_list$min_nltc)
+			message(sprintf("Filtering controls by min LTCs: %d", input_list$min_nltc))
+		}
+
+		# Filter by sex (if specified)
+		if (!is.null(input_list$sex) && length(input_list$sex) > 0) {
+			eligible_pool <- eligible_pool |>
+				dplyr::filter(sex %in% input_list$sex)
+			message(sprintf("Filtering controls by sex: %s", paste(input_list$sex, collapse = ", ")))
+		}
+
+		# Filter by ethnicity (if specified)
+		if (!is.null(input_list$eth_group) && length(input_list$eth_group) > 0) {
+			# Need to check if eth_group exists in master_risk_pool
+			if ("eth_group" %in% names(master_risk_pool)) {
+				eligible_pool <- eligible_pool |>
+					dplyr::filter(eth_group %in% input_list$eth_group)
+				message(sprintf("Filtering controls by ethnicity: %s",
+												paste(input_list$eth_group, collapse = ", ")))
+			} else {
+				warning("eth_group not available in master_risk_pool - skipping ethnicity filter")
+			}
+		}
+
+		# Filter by IMD quintile (if specified)
+		if (!is.null(patient_filters$imd_quintile) && length(patient_filters$imd_quintile) > 0) {
+			# Convert to numeric for comparison
+			imd_values <- as.numeric(patient_filters$imd_quintile)
+			eligible_pool <- eligible_pool |>
+				dplyr::filter(imd_quintile %in% imd_values)
+			message(sprintf("Filtering controls by IMD quintile: %s",
+											paste(patient_filters$imd_quintile, collapse = ", ")))
+		}
+	}
+
+	# Now collect and convert to data.table
+	eligible_pool <- eligible_pool |>
 		dplyr::select(patid, prescription_date, substance, sex, age_at_rx,
 									n_ltcs, imd_quintile, age_bin, stratum_first_presc_bin,
-									year, first_presc_bin, time_since_first_presc) %>%
-		dplyr::collect() %>%
+									year, first_presc_bin, time_since_first_presc) |>
+		dplyr::collect() |>
 		as.data.table()
 
 	# Convert date format
 	eligible_pool[, prescription_date := as.IDate(prescription_date)]
 
 	# Exclude case patients
-	eligible_pool <- eligible_pool[!patid %in% case_patids]
+	# eligible_pool <- eligible_pool[!patid %in% case_patids]
 
-	message(sprintf("Eligible prescriptions: %d", nrow(eligible_pool)))
 
 	return(eligible_pool)
 }
