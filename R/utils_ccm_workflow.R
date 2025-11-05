@@ -212,15 +212,6 @@ filter_eligible_control_pool <- function(cases, master_risk_pool, ltc_data, pati
 	if (!is.null(patient_filters)) {
 		input_list <- patient_filters$input_list
 
-		if (!is.null(patient_filters$selected_ltcs)) {
-
-			patids_with_ltc <- ltc_data[term %in% patient_filters$selected_ltcs, patid]
-			eligible_pool <- eligible_pool |>
-				dplyr::filter(patid %in% patids_with_ltc)
-			message(sprintf("Filtering controls by LTC: %s",
-											paste(patient_filters$selected_ltcs, collapse = ", ")))
-		}
-
 		# Filter by minimum number of LTCs
 		if (!is.null(input_list$min_nltc) && input_list$min_nltc > 0) {
 			eligible_pool <- eligible_pool |>
@@ -266,6 +257,19 @@ filter_eligible_control_pool <- function(cases, master_risk_pool, ltc_data, pati
 									year, first_presc_bin, time_since_first_presc) |>
 		dplyr::collect() |>
 		as.data.table()
+	setkey(eligible_pool, patid)
+
+	if (!is.null(patient_filters$selected_ltcs)) {
+		filtered_ltcs <- ltc_data[term %in% patient_filters$selected_ltcs]
+		valid_ltcs <- eligible_pool[filtered_ltcs,
+																	 on = .(patid, prescription_date > eventdate),
+																	 nomatch = 0,
+																	 allow.cartesian = TRUE
+		]
+
+		patids_with_ltc <- unique(valid_ltcs$patid)
+		eligible_pool <- eligible_pool[patid %in% patids_with_ltc]
+	}
 
 	# Convert date format
 	eligible_pool[, prescription_date := as.IDate(prescription_date)]

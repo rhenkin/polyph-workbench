@@ -72,8 +72,8 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 	controls_presc[, `:=`(dob = NULL, index_date = NULL)]
 
 	# Combine prescription data
-    debug_dt_for_rbind(cases_presc[, .(patid, eventdate, outcome_age, substance, start_date, stop_date, duration, treatment)], "cases_presc")
-    debug_dt_for_rbind(controls_presc[, .(patid, eventdate, outcome_age, substance, start_date, stop_date, duration, treatment)], "controls_presc")
+    # debug_dt_for_rbind(cases_presc[, .(patid, eventdate, outcome_age, substance, start_date, stop_date, duration, treatment)], "cases_presc")
+    # debug_dt_for_rbind(controls_presc[, .(patid, eventdate, outcome_age, substance, start_date, stop_date, duration, treatment)], "controls_presc")
 	all_prescriptions <- rbindlist(list(
 		cases_presc[, .(patid, eventdate, outcome_age, substance, start_date, stop_date, duration, treatment)],
 		controls_presc[, .(patid, eventdate, outcome_age, substance, start_date, stop_date, duration, treatment)]
@@ -92,8 +92,8 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 	controls_patient_data[, treatment := 0]
 
 
-    debug_dt_for_rbind(cases_patient_data, "cases_patient_data")
-    debug_dt_for_rbind(controls_patient_data, "controls_patient_data")
+    # debug_dt_for_rbind(cases_patient_data, "cases_patient_data")
+    # debug_dt_for_rbind(controls_patient_data, "controls_patient_data")
 	all_patient_data <- rbindlist(list(cases_patient_data, controls_patient_data))
 	all_patient_data[, study_name := study_name]
 	setkey(all_patient_data, patid)
@@ -103,7 +103,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 	# ========================================================================
 
 	# Cases: get all LTC data before their outcome
-	cases_index <- cases[, .(patid, index_date = outcome_date)]
+	cases_index <- unique(cases[, .(patid, index_date = outcome_date)])
 	cases_ltc <- cases_index[gold_ltc, on = "patid", nomatch = 0][
 		eventdate < index_date
 	]
@@ -118,8 +118,8 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 	controls_ltc[, index_date := NULL]
 
 	# Combine LTC data
-    debug_dt_for_rbind(cases_ltc[, .(patid, eventdate, age_days, term, treatment)], "cases_ltc")
-    debug_dt_for_rbind(controls_ltc[, .(patid, eventdate, age_days, term, treatment)], "controls_ltc")
+    # debug_dt_for_rbind(cases_ltc[, .(patid, eventdate, age_days, term, treatment)], "cases_ltc")
+    # debug_dt_for_rbind(controls_ltc[, .(patid, eventdate, age_days, term, treatment)], "controls_ltc")
 
 	all_ltc <- rbindlist(list(
 		cases_ltc[, .(patid, eventdate, age_days, term, treatment)],
@@ -150,10 +150,10 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 		study_name = study_name
 	)]
 
-    debug_dt_for_rbind(matched_cases, "matched_cases")
-	debug_dt_for_rbind(matched_controls, "matched_controls")
+#     debug_dt_for_rbind(matched_cases, "matched_cases")
+# 	debug_dt_for_rbind(matched_controls, "matched_controls")
 	matched_patids <- rbindlist(list(matched_cases, matched_controls), use.names = TRUE)
-    setkey(matched_patids, patid)
+  setkey(matched_patids, patid)
 
 	# ========================================================================
 	# Create study metadata
