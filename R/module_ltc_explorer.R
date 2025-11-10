@@ -25,8 +25,8 @@ module_ltc_explorer_ui <- function(id) {
             accordion_panel(
                 title = "Prevalence table",
                 navset_tab(
-                    # Tab 1: Overall cohort prevalence
-                    nav_panel("Cohort prevalence", dataTableOutput(ns("ltc_freq_table"))),
+                    # Tab 1: Overall cases prevalence
+                    nav_panel("Prevalence", dataTableOutput(ns("ltc_freq_table"))),
                     # Tab 2: Prevalence stratified by demographic variables
                     nav_panel(
                         "Prevalence across demographics",
@@ -107,13 +107,26 @@ module_ltc_explorer_server <- function(id, outcome_prescriptions, ltc_data, pati
         # Reactive: Calculate overall LTC frequency for the cohort
         ltc_freq_df <- reactive({
             ltcs <- valid_ltcs()
-            calculate_ltc_frequency(ltcs)
+            cases_freq <- calculate_ltc_frequency(ltcs)
+            overall_freq <- calculate_ltc_frequency(gold_ltc)
+            result <- merge(
+            	cases_freq[, .(term, N, pct_cases = pct_total)],
+            	overall_freq[, .(term, pct_overall = pct_total)],
+            	by = "term",
+            	all.x = TRUE
+            )
+						result[, N := prettyNum(N, big.mark = ",")]
+            setnames(result, c("pct_cases", "pct_overall"),
+            				 c("Cases (%)", "Overall (%)"))
+
+            result
+
         })
 
         # Output: Render the overall LTC frequency table
         output$ltc_freq_table <- renderDataTable({
             ltc_freq_df()
-        })
+        }, rownames = FALSE)
 
         # Output: Render LTC frequency table stratified by demographic variables
         output$demog_ltc_freq_table <- renderDataTable(

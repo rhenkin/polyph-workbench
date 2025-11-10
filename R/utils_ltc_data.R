@@ -8,7 +8,7 @@
 #' @return data.table with columns: term, N, pct_total (sorted by frequency descending)
 calculate_ltc_frequency <- function(ltcs) {
     result <- calculate_item_frequency(ltcs, "term")
-    result[, pct_total := signif(pct_total, digits = 2)]
+    result[, pct_total := round(100*pct_total, digits = 2)]
     return(result)
 }
 

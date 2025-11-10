@@ -11,7 +11,7 @@ module_prescription_explorer_ui <- function(id) {
           title = "Prevalence table",
           value = "prev_tables",
           navset_tab(
-            nav_panel("Cohort prevalence",
+            nav_panel("Prevalence",
             						dataTableOutput(ns("subst_freq_table"))
             					),
             nav_panel("Prevalence across demographics",
@@ -90,7 +90,7 @@ module_prescription_explorer_server <- function(id, outcome_prescriptions, patie
 
     output$subst_freq_table <- renderDataTable({
       df <- copy(subst_frequency())
-    	df[,.(substance, N, pct_total = round(pct_total*100, digits = 2))]
+    	df[,.(substance, N = prettyNum(N, big.mark = ","), pct_total = round(pct_total*100, digits = 2))]
     }, rownames = FALSE)
 
     demog_subs_freq_df <- reactive({

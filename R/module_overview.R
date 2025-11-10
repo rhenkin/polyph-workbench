@@ -11,7 +11,7 @@ module_overview_ui <- function(id) {
 				title = "Demographic distribution",
 				value = "demodists",
 				navset_tab(
-					nav_panel("Cohort table", gt_output(ns("demodist_table"))),
+					nav_panel("Table", gt_output(ns("demodist_table"))),
 					nav_panel("Distribution across polypharmacy levels", gt_output(ns("pp_demodist_table")))
 				)
 			),
