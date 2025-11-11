@@ -107,6 +107,11 @@ module_cca_ui <- function(id) {
 											card_header("Prevalence tables"), card_body(
 												module_cca_prevalence_ui(ns("prevalence"))
 											)
+										),
+										card(
+											card_header("Co-prescription Analysis"), card_body(
+												module_cca_copresc_ui(ns("copresc"))
+											)
 										)),
 					full_screen  = TRUE
 				)
@@ -351,6 +356,12 @@ module_cca_server <- function(id, prepared_study_data_r = NULL) {
 			patient_data_r = patient_data_r,
 			prescriptions_r = prescriptions_aggregated_r,  # Changed to use aggregated version
 			ltcs_r = ltcs_r
+		)
+
+		module_cca_copresc_server(
+			id = "copresc",
+			prescriptions_r = prescriptions_aggregated_r,
+			patient_data_r = patient_data_r
 		)
 	})
 }
