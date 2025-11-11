@@ -86,7 +86,7 @@ add_burden_groups <- function(patient_data, prescriptions, ltcs) {
 #' @param item_col Name of the column containing items (term or substance)
 #' @return data.table with N, pct by group and item
 calculate_frequency_stats <- function(data, item_col) {
-  freq <- data[, .N, by = c("group", item_col)]
+  freq <- data[, .(N = uniqueN(patid)), by = c("group", item_col)]
   group_totals <- data[, .(total = uniqueN(patid)), by = group]
   freq[group_totals, pct := round(N / total * 100, 2), on = "group"]
   setorder(freq, -pct)
