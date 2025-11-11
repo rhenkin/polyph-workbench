@@ -92,10 +92,14 @@ module_cca_ui <- function(id) {
 							ns("topten_substance_bar_plot")
 						))))
 					),
-
-
-					nav_panel(title = "Advanced", card(
-						card_header("Prevalence tables"), card_body(
+					nav_panel(title = "Advanced",
+						card(
+							card_header("Sociodemographics"), card_body(
+								module_cca_sociodemographics_ui(ns("sociodemog"))
+							)
+						),
+						card(
+							card_header("Prevalence tables"), card_body(
 							module_cca_prevalence_ui(ns("prevalence"))
 						)
 					)),
@@ -306,6 +310,11 @@ module_cca_server <- function(id, prepared_study_data_r = NULL) {
         title = "Top 10 Background medications most prevalent in cases"
       ) |> as_vegaspec()
     })
+
+    module_cca_sociodemographics_server(
+    	id = "sociodemog",
+    	patient_data_r = patient_data_r
+    )
 
     # Prevalence tables sub-module
     module_cca_prevalence_server(
