@@ -16,7 +16,7 @@ perform_chisq_tests <- function(df_counts, cat_totals, demog_var, condition_col)
 	return(chisq_tests)
 }
 
-calc_all_ors_vectorized <- function(drug_matrix) {
+calc_all_ors_vectorized <- function(drug_matrix, return_contingency = FALSE) {
 	n_drugs <- ncol(drug_matrix)
 	n_patients <- nrow(drug_matrix)
 	drug_names <- colnames(drug_matrix)
@@ -61,5 +61,14 @@ calc_all_ors_vectorized <- function(drug_matrix) {
 	rownames(ci_lower_matrix) <- colnames(ci_lower_matrix) <- drug_names
 	rownames(ci_upper_matrix) <- colnames(ci_upper_matrix) <- drug_names
 
-	return(list(or = or_matrix, ci_lower = ci_lower_matrix, ci_upper = ci_upper_matrix))
+	result <- list(or = or_matrix, ci_lower = ci_lower_matrix, ci_upper = ci_upper_matrix)
+
+	if (return_contingency) {
+		result$a <- a
+		result$b <- b
+		result$c <- c
+		result$d <- d
+	}
+
+	return(result)
 }

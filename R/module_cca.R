@@ -361,7 +361,8 @@ module_cca_server <- function(id, prepared_study_data_r = NULL) {
 		module_cca_copresc_server(
 			id = "copresc",
 			prescriptions_r = prescriptions_aggregated_r,
-			patient_data_r = patient_data_r
+			patient_data_r = patient_data_r,
+			bnf_level = input$cca_bnf_level
 		)
 	})
 }

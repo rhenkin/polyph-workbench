@@ -17,7 +17,7 @@ module_cca_sociodemographics_server <- function(id, patient_data_r) {
 		# Calculate sociodemographic statistics
 		sociodemog_data <- reactive({
 			req(patient_data_r())
-			browser()
+
 			patient_df <- patient_data_r()
 
 			# Calculate totals

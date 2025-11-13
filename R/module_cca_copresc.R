@@ -11,35 +11,32 @@
 module_cca_copresc_ui <- function(id) {
 	ns <- NS(id)
 
-	tagList(
-		card(
-			card_header("Co-prescription Analysis Settings"),
-			layout_columns(
-				col_widths = c(4, 4, 4),
-				numericInput(
-					ns("min_prevalence"),
-					"Minimum drug prevalence (%):",
-					value = 2,
-					min = 0.1,
-					max = 10,
-					step = 0.1
+		accordion(
+			open = FALSE,
+			accordion_panel(
+				title = "Results",
+				value = "copresc_results",
+					layout_columns(
+						col_widths = c(1,1,1),
+						numericInput(
+							ns("min_prevalence"),
+							"Minimum drug prevalence (%):",
+							value = 2,
+							min = 0.1,
+							max = 10,
+							step = 0.1
+						),
+						numericInput(
+							ns("min_coprescription"),
+							"Minimum co-prescription (%):",
+							value = 1,
+							min = 0.1,
+							max = 10,
+							step = 0.1
+						),
+						checkboxInput(ns("or_min_filter"),
+													"OR > 1 only?",value =FALSE)
 				),
-				numericInput(
-					ns("min_coprescription"),
-					"Minimum co-prescription (%):",
-					value = 1,
-					min = 0.1,
-					max = 10,
-					step = 0.1
-				),
-				actionButton(
-					ns("calculate"),
-					"Calculate Co-prescription ORs",
-					class = "btn-primary",
-					style = "margin-top: 25px;"
-				)
-			)
-		),
 		navset_card_tab(
 			id = ns("results_tabs"),
 			nav_panel(
@@ -52,14 +49,22 @@ module_cca_copresc_ui <- function(id) {
 			nav_panel(
 				title = "Heatmap",
 				card_body(
+					radioButtons(
+						ns("heatmap_group"),
+						"Show OR for:",
+						choices = c("Cases" = "case", "Controls" = "control"),
+						selected = "case",
+						inline = TRUE
+					),
 					vegawidgetOutput(ns("copresc_heatmap"), height = "700px")
 				)
 			)
 		)
+			)
 	)
 }
 
-module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r) {
+module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r, bnf_level) {
 	moduleServer(id, function(input, output, session) {
 		ns <- session$ns
 
@@ -67,13 +72,8 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r) {
 		copresc_results <- reactiveVal(NULL)
 
 		# Calculate co-prescription ORs when button clicked
-		observeEvent(input$calculate, {
+		observe({
 			req(prescriptions_r(), patient_data_r())
-
-			showNotification("Calculating co-prescription ORs...",
-											 id = "copresc_calc",
-											 duration = NULL,
-											 type = "message")
 
 			tryCatch({
 				results <- calculate_coprescription_ors(
@@ -84,17 +84,13 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r) {
 
 				copresc_results(results)
 
-				removeNotification("copresc_calc")
-
-				n_sig <- sum(results$significant == TRUE, na.rm = TRUE)
 				showNotification(
-					sprintf("Analysis complete: %d drug pairs found, %d with significant differences",
-									nrow(results), n_sig),
+					sprintf("Analysis complete: %d drug pairs found",
+									nrow(results)),
 					type = "message",
 					duration = 5
 				)
 			}, error = function(e) {
-				removeNotification("copresc_calc")
 				showNotification(
 					paste("Error calculating ORs:", e$message),
 					type = "error",
@@ -103,14 +99,16 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r) {
 			})
 		})
 
-		# Render table
-		output$copresc_table <- renderReactable({
+		display_data <- reactive({
 			req(copresc_results())
 
 			data <- copresc_results()
 
 			# Check for missing values and handle them
 			data <- data[!is.na(case_or) & !is.na(control_or)]
+			if (input$or_min_filter == TRUE) {
+				data <- data[case_or > 1 & control_or >= 1]
+			}
 
 			if (nrow(data) == 0) {
 				return(NULL)
@@ -119,26 +117,45 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r) {
 			# Format OR columns
 			data[, case_or_display := sprintf("%.2f (%.2f-%.2f)",
 																				case_or, case_ci_lower, case_ci_upper)]
+			data[case_p < 0.05, case_or_display := paste0(case_or_display, "*")]
 			data[, control_or_display := sprintf("%.2f (%.2f-%.2f)",
 																					 control_or, control_ci_lower, control_ci_upper)]
+			data[control_p < 0.05, control_or_display := paste0(control_or_display, "*")]
 
-			# Create display table with abs_or_diff for sorting
-			display_data <- data[, .(
+			# Create display table with abs_or_diff for sorting and arrow column
+				data[, .(
 				drug1,
 				drug2,
 				case_or = case_or_display,
+				direction = case_or - control_or,  # Positive = cases higher
 				control_or = control_or_display,
-				or_diff,
-				abs_or_diff = base::abs(or_diff),
-				significant
+				or_diff
 			)]
 
+		})
+
+		# Render table
+		output$copresc_table <- renderReactable({
+
+			req(display_data())
+
 			reactable(
-				display_data,
+				display_data(),
 				columns = list(
 					drug1 = colDef(name = "Drug 1", minWidth = 150),
 					drug2 = colDef(name = "Drug 2", minWidth = 150),
 					case_or = colDef(name = "Case OR (95% CI)", minWidth = 150),
+					direction = colDef(
+						name = "",
+						width = 60,
+						align = "center",
+						cell = function(value) {
+							if (is.na(value) || !is.finite(value)) return("")
+							arrow <- if (value > 0) "→" else "←"
+							color <- if (value > 0) "#e74c3c" else "#3498db"  # Red for cases, blue for controls
+							htmltools::tags$span(style = paste0("color: ", color, "; font-size: 20px; font-weight: bold;"), arrow)
+						}
+					),
 					control_or = colDef(name = "Control OR (95% CI)", minWidth = 150),
 					or_diff = colDef(
 						name = "OR Difference",
@@ -151,22 +168,11 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r) {
 								list(fontWeight = "bold", color = color)
 							}
 						}
-					),
-					abs_or_diff = colDef(show = FALSE),  # Hidden column for sorting
-					significant = colDef(
-						name = "Significant*",
-						cell = function(value) {
-							if (is.na(value)) return("")
-							if (value) "✓" else ""
-						},
-						align = "center",
-						width = 100
 					)
 				),
 				defaultPageSize = 20,
 				searchable = TRUE,
-				filterable = TRUE,
-				defaultSorted = list(abs_or_diff = "desc"),
+				fullWidth = FALSE,
 				theme = reactableTheme(
 					borderColor = "#dfe2e5",
 					stripedColor = "#f6f8fa"
@@ -176,18 +182,32 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r) {
 
 		# Render heatmap using vegawidget
 		output$copresc_heatmap <- renderVegawidget({
-			req(copresc_results())
+			req(copresc_results(), input$heatmap_group)
 
 			data <- copresc_results()
 
+			# Select the OR column based on user choice
+			if (input$heatmap_group == "case") {
+				data[, or_value := case_or]
+				data[, ci_lower_value := case_ci_lower]
+				data[, ci_upper_value := case_ci_upper]
+				group_label <- "Cases"
+			} else {
+				data[, or_value := control_or]
+				data[, ci_lower_value := control_ci_lower]
+				data[, ci_upper_value := control_ci_upper]
+				group_label <- "Controls"
+			}
+
 			# Filter out rows with missing values
-			data <- data[!is.na(or_diff) & is.finite(or_diff)]
+			data <- data[!is.na(or_value) & is.finite(or_value) &
+									 	or_value > 1]
 
 			if (nrow(data) == 0) {
 				return(NULL)
 			}
 
-			create_copresc_heatmap(data)
+			create_copresc_or_heatmap(data, group_label)
 		})
 
 		# Download handler

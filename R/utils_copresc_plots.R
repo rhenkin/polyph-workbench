@@ -1,51 +1,64 @@
 #' Visualization functions for co-prescription analysis
 #' Creates heatmaps using vegawidget (matching CE module style)
 
-#' Create OR difference heatmap for co-prescription analysis
+#' Create OR heatmap for co-prescription analysis (single group)
 #'
-#' @param copresc_results data.table with drug1, drug2, or_diff, significant columns
+#' @param copresc_results data.table with drug1, drug2, or_value, significant columns
+#' @param group_label Label for the group (e.g., "Cases" or "Controls")
 #' @return vegaspec object
-create_copresc_heatmap <- function(copresc_results) {
+create_copresc_or_heatmap <- function(copresc_results, group_label = "Cases") {
 
 	# Create long format data for heatmap
 	long_df <- copresc_results[, .(
 		drug1,
 		drug2,
-		or_diff,
-		significant,
-		label = ifelse(significant, "*", "")
+		or_value
+		# significant,
+		# label = ifelse(significant, "*", "")
 	)]
+
+	# Add reverse pairs to make symmetric
+	long_df_reverse <- copresc_results[, .(
+		drug1 = drug2,
+		drug2 = drug1,
+		or_value
+		# significant,
+		# label = ifelse(significant, "*", "")
+	)]
+
+	# Combine both directions
+	long_df <- rbind(long_df, long_df_reverse)
 
 	# Get unique drugs and create ordering
 	all_drugs <- unique(c(long_df$drug1, long_df$drug2))
 
 	# Create matrix for clustering
-	or_diff_matrix <- matrix(0, length(all_drugs), length(all_drugs),
-													 dimnames = list(all_drugs, all_drugs))
+	or_matrix <- matrix(1, length(all_drugs), length(all_drugs),
+											dimnames = list(all_drugs, all_drugs))
 
 	for (i in seq_len(nrow(long_df))) {
 		d1 <- long_df$drug1[i]
 		d2 <- long_df$drug2[i]
-		val <- long_df$or_diff[i]
+		val <- long_df$or_value[i]
 
-		or_diff_matrix[d1, d2] <- val
-		or_diff_matrix[d2, d1] <- val
+		or_matrix[d1, d2] <- val
 	}
 
-	# Replace NA with 0 for clustering
-	or_diff_matrix[is.na(or_diff_matrix)] <- 0
+	# Replace NA with 1 for clustering
+	or_matrix[is.na(or_matrix)] <- 1
 
 	# Hierarchical clustering
-	if (nrow(or_diff_matrix) > 2) {
-		dist_matrix <- dist(or_diff_matrix, method = "euclidean")
+	if (nrow(or_matrix) > 2) {
+		dist_matrix <- dist(or_matrix, method = "euclidean")
 		hclust_result <- hclust(dist_matrix, method = "ward.D2")
-		drug_order <- rownames(or_diff_matrix)[hclust_result$order]
+		drug_order <- rownames(or_matrix)[hclust_result$order]
 	} else {
 		drug_order <- all_drugs
 	}
 
-	# Calculate max absolute value for symmetric color scale
-	max_abs_val <- max(base::abs(long_df$or_diff), na.rm = TRUE)
+	# Calculate max OR for scale
+	long_df[, or_log := log(or_value)]
+	max_or <- max(long_df$or_value, na.rm = TRUE)
 
 	# Create Vega-Lite spec
 	spec <- list(
@@ -54,7 +67,7 @@ create_copresc_heatmap <- function(copresc_results) {
 		hconcat = list(
 			# Main heatmap
 			list(
-				title = "Co-prescription OR Differences: Cases vs Controls",
+				title = paste0("Co-prescription ORs: ", group_label),
 				width = 600,
 				height = 600,
 				transform = list(list(filter = list(param = "brush"))),
@@ -91,53 +104,49 @@ create_copresc_heatmap <- function(copresc_results) {
 								)
 							),
 							color = list(
-								field = "or_diff",
+								field = "or_log",
 								type = "quantitative",
 								scale = list(
-									scheme = "redblue",
-									reverse = TRUE,
-									domain = c(-max_abs_val, max_abs_val),
-									domainMid = 0
+									scheme = "goldred",
+									reverse = FALSE,
+									domain = c(0, max(long_df$or_log))
 								),
-								legend = list(
-									title = "OR Difference (Case - Control)",
-									orient = "right"
-								)
+								legend = list(labelExpr = "round(exp(datum.value))")
 							),
 							tooltip = list(
 								list(field = "drug1", type = "nominal", title = "Drug 1"),
 								list(field = "drug2", type = "nominal", title = "Drug 2"),
-								list(field = "or_diff", type = "quantitative", title = "OR Difference", format = ".2f"),
-								list(field = "significant", type = "nominal", title = "Significant (p<0.05)")
-							)
-						)
-					),
-					# Significance markers
-					list(
-						mark = list(
-							type = "text",
-							fontSize = 20,
-							fontWeight = "bold"
-						),
-						encoding = list(
-							x = list(field = "drug1", type = "nominal", sort = drug_order),
-							y = list(field = "drug2", type = "nominal", sort = drug_order),
-							text = list(field = "label", type = "nominal"),
-							color = list(value = "black"),
-							opacity = list(
-								condition = list(
-									test = "datum.significant == true",
-									value = 1
-								),
-								value = 0
+								list(field = "or_value", type = "quantitative", title = "OR", format = ".2f")
+								# list(field = "significant", type = "nominal", title = "Significant")
 							)
 						)
 					)
+					# Significance markers
+					# list(
+					# 	mark = list(
+					# 		type = "text",
+					# 		fontSize = 20,
+					# 		fontWeight = "bold"
+					# 	),
+					# 	encoding = list(
+					# 		x = list(field = "drug1", type = "nominal", sort = drug_order),
+					# 		y = list(field = "drug2", type = "nominal", sort = drug_order),
+					# 		text = list(field = "label", type = "nominal"),
+					# 		color = list(value = "white"),
+					# 		opacity = list(
+					# 			condition = list(
+					# 				test = "datum.significant == true",
+					# 				value = 1
+					# 			),
+					# 			value = 0
+					# 		)
+					# 	)
+					# )
 				)
 			),
 			# Brush overview (zoom control)
 			list(
-				title = "Brush to Zoom",
+				title = "Drag to Zoom",
 				width = 150,
 				height = 150,
 				params = list(list(
@@ -171,13 +180,12 @@ create_copresc_heatmap <- function(copresc_results) {
 						)
 					),
 					color = list(
-						field = "or_diff",
+						field = "or_log",
 						type = "quantitative",
 						scale = list(
-							scheme = "redblue",
-							reverse = TRUE,
-							domain = c(-max_abs_val, max_abs_val),
-							domainMid = 0
+							scheme = "goldred",
+							reverse = FALSE,
+							domain = c(0, max(long_df$or_log))
 						),
 						legend = NULL
 					)
