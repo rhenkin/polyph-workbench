@@ -11,56 +11,91 @@
 module_cca_copresc_ui <- function(id) {
 	ns <- NS(id)
 
-		accordion(
-			open = FALSE,
-			accordion_panel(
-				title = "Results",
-				value = "copresc_results",
-					layout_columns(
-						col_widths = c(1,1,1),
-						numericInput(
-							ns("min_prevalence"),
-							"Minimum drug prevalence (%):",
-							value = 2,
-							min = 0.1,
-							max = 10,
-							step = 0.1
-						),
-						numericInput(
-							ns("min_coprescription"),
-							"Minimum co-prescription (%):",
-							value = 1,
-							min = 0.1,
-							max = 10,
-							step = 0.1
-						),
-						checkboxInput(ns("or_min_filter"),
-													"OR > 1 only?",value =FALSE)
+	accordion(
+		open = FALSE,
+		accordion_panel(
+			title = "Results",
+			value = "copresc_results",
+			layout_columns(
+				col_widths = c(1,1,1),
+				numericInput(
+					ns("min_prevalence"),
+					"Minimum drug prevalence (%):",
+					value = 2,
+					min = 0.1,
+					max = 10,
+					step = 0.1
 				),
-		navset_card_tab(
-			id = ns("results_tabs"),
-			nav_panel(
-				title = "Table",
-				card_body(
-					downloadButton(ns("download_table"), "Download Table"),
-					reactableOutput(ns("copresc_table"))
-				)
+				numericInput(
+					ns("min_coprescription"),
+					"Minimum co-prescription (%):",
+					value = 1,
+					min = 0.1,
+					max = 10,
+					step = 0.1
+				),
+				checkboxInput(ns("or_min_filter"),
+											"OR > 1 only?",value =FALSE)
 			),
-			nav_panel(
-				title = "Heatmap",
-				card_body(
-					radioButtons(
-						ns("heatmap_group"),
-						"Show OR for:",
-						choices = c("Cases" = "case", "Controls" = "control"),
-						selected = "case",
-						inline = TRUE
-					),
-					vegawidgetOutput(ns("copresc_heatmap"), height = "700px")
+			navset_card_tab(
+				id = ns("results_tabs"),
+				nav_panel(
+					title = "Forest Plot",
+					card_body(
+						flowLayout(
+							selectInput(
+								ns("forest_sort"),
+								"Sort by:",
+								choices = c(
+									"Drug 1" = "drug1",
+									"Drug 2" = "drug2",
+									"Case OR" = "case_or",
+									"Control OR" = "control_or",
+									"OR Difference" = "or_diff"
+								),
+								selected = "or_diff"
+							),
+							checkboxInput(ns("forest_sort_asc"), "Lowest to highest?", value = TRUE)
+						),
+						vegawidgetOutput(ns("copresc_forest"), height = "800px"),
+						layout_column_wrap(width="100px",fixed_width = TRUE,
+							div(
+								style = "padding-top: 25px;",
+								actionButton(ns("prev_page"), "← Previous", class = "btn-secondary")
+							),
+							div(
+								style = "padding-top: 32px; text-align: center;",
+								textOutput(ns("page_info"))
+							),
+							div(
+								style = "padding-top: 25px;",
+								actionButton(ns("next_page"), "Next →", class = "btn-secondary")
+							)
+						)
+					)
+				),
+				nav_panel(
+					title = "Table",
+					card_body(
+						downloadButton(ns("download_table"), "Download Table"),
+						reactableOutput(ns("copresc_table"))
+					)
+				),
+				nav_panel(
+					title = "Heatmap",
+					card_body(
+						radioButtons(
+							ns("heatmap_group"),
+							"Show OR for:",
+							choices = c("Cases" = "case", "Controls" = "control"),
+							selected = "case",
+							inline = TRUE
+						),
+						vegawidgetOutput(ns("copresc_heatmap"), height = "700px")
+					)
 				)
 			)
 		)
-			)
 	)
 }
 
@@ -70,6 +105,9 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r, bnf_l
 
 		# Reactive to store calculated results
 		copresc_results <- reactiveVal(NULL)
+
+		# Reactive value for current page
+		current_page <- reactiveVal(1)
 
 		# Calculate co-prescription ORs when button clicked
 		observe({
@@ -123,7 +161,7 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r, bnf_l
 			data[control_p < 0.05, control_or_display := paste0(control_or_display, "*")]
 
 			# Create display table with abs_or_diff for sorting and arrow column
-				data[, .(
+			data[, .(
 				drug1,
 				drug2,
 				case_or = case_or_display,
@@ -132,6 +170,76 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r, bnf_l
 				or_diff
 			)]
 
+		})
+
+		# Reset to page 1 when sort changes
+		observeEvent(input$forest_sort, {
+			current_page(1)
+		})
+
+		# Previous page button
+		observeEvent(input$prev_page, {
+			if (current_page() > 1) {
+				current_page(current_page() - 1)
+			}
+		})
+
+		# Next page button
+		observeEvent(input$next_page, {
+			req(forest_data())
+			total_pages <- ceiling(nrow(forest_data()) / 25)
+			if (current_page() < total_pages) {
+				current_page(current_page() + 1)
+			}
+		})
+
+		# Sorted and filtered data for forest plot
+		forest_data <- reactive({
+			req(copresc_results())
+
+			data <- copy(copresc_results())
+
+			# Filter for valid data
+			data <- data[!is.na(case_or) & !is.na(control_or) &
+									 	is.finite(case_or) & is.finite(control_or)]
+
+			if (input$or_min_filter == TRUE) {
+				data <- data[case_or > 1 & control_or >= 1]
+			}
+
+			if (nrow(data) == 0) {
+				return(NULL)
+			}
+
+			if (input$forest_sort_asc==TRUE) {
+				order_dir <- 1
+			} else order_dir <- -1
+			setorderv(data, cols = input$forest_sort, order = order_dir)
+
+			return(data)
+		})
+
+		# Page info text
+		output$page_info <- renderText({
+			req(forest_data())
+			total_pages <- ceiling(nrow(forest_data()) / 25)
+			paste("Page", current_page(), "of", total_pages)
+		})
+
+		# Paginated data for current page
+		page_data <- reactive({
+			req(forest_data())
+
+			data <- forest_data()
+			start_row <- (current_page() - 1) * 25 + 1
+			end_row <- min(current_page() * 25, nrow(data))
+
+			data <- data[start_row:end_row]
+
+			# Add drug pair label for y-axis
+			data[, drug_pair := paste0(drug1, " + ", drug2)]
+
+			return(data)
 		})
 
 		# Render table
@@ -208,6 +316,19 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r, bnf_l
 			}
 
 			create_copresc_or_heatmap(data, group_label)
+		})
+
+		# Render forest plot
+		output$copresc_forest <- renderVegawidget({
+			req(page_data())
+
+			data <- page_data()
+
+			if (nrow(data) == 0) {
+				return(NULL)
+			}
+
+			create_copresc_forest_plot(data)
 		})
 
 		# Download handler

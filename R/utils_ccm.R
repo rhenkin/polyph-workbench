@@ -298,7 +298,7 @@ get_eligible_controls_extended <- function(cases_df, gold_patient, gold_ltc, gol
 
 	# Join with patient demographic data
 	controls_extended <- controls_core[gold_patient, on = "patid", nomatch = 0][
-		, .(patid, index_date, term, gender, imd_quintile, eth_group, dob)
+		, .(patid, index_date, term, sex, imd_quintile, eth_group, dob)
 	]
 
 	return(controls_extended)

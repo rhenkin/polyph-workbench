@@ -201,3 +201,163 @@ create_copresc_or_heatmap <- function(copresc_results, group_label = "Cases") {
 
 	return(vegawidget::as_vegaspec(spec))
 }
+
+#' Create Forest Plot for Co-prescription Analysis
+#'
+#' Creates a forest plot showing case and control ORs side-by-side for each drug pair
+#' Uses rule marks for CI lines and point marks for OR estimates
+#'
+#' @param data data.table with columns: drug_pair, drug1, drug2,
+#'   case_or, case_ci_lower, case_ci_upper,
+#'   control_or, control_ci_lower, control_ci_upper
+#' @return vegaspec object
+create_copresc_forest_plot <- function(data) {
+
+	# Prepare data in long format for grouped display
+	# Each drug pair will have two rows: one for case, one for control
+	data_long <- rbindlist(list(
+		data[, .(
+			drug_pair = drug_pair,
+			drug1 = drug1,
+			drug2 = drug2,
+			group = "case",
+			or = case_or,
+			ci_lower = case_ci_lower,
+			ci_upper = case_ci_upper
+		)],
+		data[, .(
+			drug_pair = drug_pair,
+			drug1 = drug1,
+			drug2 = drug2,
+			group = "control",
+			or = control_or,
+			ci_lower = control_ci_lower,
+			ci_upper = control_ci_upper
+		)]
+	))
+
+	# Filter out invalid values
+	data_long <- data_long[!is.na(or) & is.finite(or) &
+												 	!is.na(ci_lower) & is.finite(ci_lower) &
+												 	!is.na(ci_upper) & is.finite(ci_upper)]
+
+	if (nrow(data_long) == 0) {
+		return(NULL)
+	}
+
+	# Get unique drug pairs in order for y-axis
+	drug_pair_order <- unique(data$drug_pair)
+
+	# Calculate max CI for x-axis scale
+	max_ci <- max(data_long$ci_upper, na.rm = TRUE)
+	x_max <- min(max_ci * 1.1, 20)  # Cap at 20 for readability
+
+	# Create Vega-Lite spec
+	spec <- list(
+		`$schema` = vegawidget::vega_schema(),
+		data = list(values = data_long),
+		width = 600,
+		height = 25 * length(drug_pair_order),
+		title = "Co-prescription Odds Ratios: Cases vs Controls",
+		encoding = list(
+			y = list(
+				field = "drug_pair",
+				type = "nominal",
+				title = NULL,
+				sort = drug_pair_order,
+				axis = list(
+					labelFontSize = 11,
+					labelLimit = 250,
+					minExtent = 250
+				)
+			),
+			yOffset = list(
+				field = "group",
+				type = "nominal",
+				scale = list(
+					domain = c("case", "control"),
+					range = c(0, 20)  # Offset to show case/control on same row
+				)
+			)
+		),
+		layer = list(
+			#Reference line at OR = 1
+			list(
+				mark = list(
+					type = "rule",
+					strokeDash = c(3, 3),
+					color = "gray"
+				),
+				encoding = list(
+					x = list(datum = 1),
+					y = list()
+				)
+			),
+			# CI lines (rule mark with x and x2)
+			list(
+				mark = list(
+					type = "rule",
+					size = 2
+				),
+				encoding = list(
+					x = list(
+						field = "ci_lower",
+						type = "quantitative",
+						title = "Odds Ratio",
+						# scale = list(
+						# 	domain = c(0, x_max),
+						# 	type = "log",
+						# 	nice = FALSE
+						# ),
+						axis = list(
+							grid = TRUE,
+							tickCount = 10
+						)
+					),
+					x2 = list(
+						field = "ci_upper"
+					),
+					color = list(
+						field = "group",
+						type = "nominal",
+						scale = list(
+							domain = c("case", "control"),
+							range = c("#e74c3c", "#3498db")  # Red for cases, blue for controls
+						),
+						legend = list(
+							title = "Group",
+							orient = "top"
+						)
+					)
+				)
+			),
+			# OR point estimates
+			list(
+				mark = list(
+					type = "point",
+					filled = TRUE,
+					size = 80
+				),
+				encoding = list(
+					x = list(
+						field = "or",
+						type = "quantitative"
+					),
+					color = list(
+						field = "group",
+						type = "nominal"
+					),
+					tooltip = list(
+						list(field = "drug_pair", type = "nominal", title = "Drug Pair"),
+						list(field = "group", type = "nominal", title = "Group"),
+						list(field = "or", type = "quantitative", title = "OR", format = ".2f"),
+						list(field = "ci_lower", type = "quantitative", title = "CI Lower", format = ".2f"),
+						list(field = "ci_upper", type = "quantitative", title = "CI Upper", format = ".2f")
+					)
+				)
+			)
+		)
+	)
+
+	vegawidget::as_vegaspec(spec)
+}

@@ -23,7 +23,7 @@ buildWhereConditions <- function(dt,
 	}
 
 	if (!is.null(sex_f)) {
-		result <- result[gender %in% sex_f]
+		result <- result[sex %in% sex_f]
 	}
 
 	if (!is.null(imd_quintile_f)) {
@@ -154,7 +154,7 @@ buildPatientQuery <- function(gold_patient,gold_outcomes,gold_ltc,terms = NULL,
 	filtered_dt <- buildWhereConditions(base_dt, terms, NULL, eth_group, sex, imd_quintile, outcome)
 
 	# Select distinct patients with required columns
-	result <- unique(filtered_dt[, .(patid, dob, sex = gender, eth_group, imd_quintile)])
+	result <- unique(filtered_dt[, .(patid, dob, sex, eth_group, imd_quintile)])
 
 	return(result)
 }

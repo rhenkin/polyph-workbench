@@ -22,6 +22,7 @@ setkey(gold_outcomes, patid, outcome, eventdate)
 setkey(gold_acute_presc, patid)
 
 gold_patient <- gold_patient[!is.na(imd_quintile)]
+colnames(gold_patient)[3] <- "sex"
 valid_pats <- gold_patient$patid
 gold_cp <- gold_cp[patid %in% valid_pats]
 gold_ltc <- gold_ltc[patid %in% valid_pats]

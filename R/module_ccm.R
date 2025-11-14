@@ -7,8 +7,8 @@ module_ccm_ui <- function(id) {
 										 numericInput(ns("pred_window"), "Prediction window:",
 										 						 value = 30, min = 1, max = 365),
 										 numericInput(ns("match_ratio"), "Control:Case ratio:",
-										 						 value = 4, min = 1, max = 10, step = 1),
-										 div("Risk-set matching using sex, binned age at prescription and binned time since multimorbidity"),
+										 						 value = 1, min = 1, max = 10, step = 1),
+										 div("Risk-set matching using sex, binned age at prescription, binned time since first prescription and calendar year"),
 										 actionButton(ns("create_cohort"), "Create matched cohort", class = "btn-primary")
 							),
 							column(6,

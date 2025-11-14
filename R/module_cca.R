@@ -112,7 +112,14 @@ module_cca_ui <- function(id) {
 											card_header("Co-prescription Analysis"), card_body(
 												module_cca_copresc_ui(ns("copresc"))
 											)
-										)),
+										)
+										# card(
+										# 	card_header("Sensitivity Analysis"),
+										# 	card_body(
+										# 		module_cca_sensitivity_ui(ns("sensitivity"))
+										# 	)
+										# )
+										),
 					full_screen  = TRUE
 				)
 
@@ -364,5 +371,12 @@ module_cca_server <- function(id, prepared_study_data_r = NULL) {
 			patient_data_r = patient_data_r,
 			bnf_level = input$cca_bnf_level
 		)
+
+		# module_cca_sensitivity_server(
+		# 	"sensitivity",
+		# 	patient_data_r,
+		# 	prescriptions_aggregated_r,
+		# 	ltcs_r
+		# )
 	})
 }
