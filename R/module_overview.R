@@ -79,13 +79,19 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 			df3 <- patient_data()
 			df <- merge(df1[df2,], df3, by = "patid", all.x = TRUE, all.y = FALSE)
 			df <- df[patid %in% df3$patid]
-
+			breaks <- c(0,44,64,84,Inf)
+			labels <- c("<=44", "45-64", "65-84", "85+")
+			df[, age_group := cut(age_days/365.25,
+														breaks = breaks,
+														labels = labels,
+														include.lowest = TRUE,
+														ordered_result = TRUE)]
 			df[,age_first_prescription := (first_prescription - dob)]
 			df[, first_prescription_age_group := cut(age_first_prescription/365.25,
 																							 breaks = breaks,
 																							 labels = labels,
 																							 include.lowest = TRUE,
-																							 ordered_result = TRUE,)]
+																							 ordered_result = TRUE)]
 			tto_labels <- c("<=5", "<=10", "10+")
 			tto_breaks <- c(0,5,10,Inf)
 			df[, tto_group := cut(time_to_outcome,
@@ -166,27 +172,27 @@ module_overview_server <- function(id, outcome_prescriptions, patient_data, outc
 		# 														title = "Burden by IMD quintile")
 		# })
 		#
-		# # 7. Demographic distribution tables
-		# output$demodist_table <- render_gt({
-		# 	pp_df <- pp_demog_table()
-		# 	to_print <- prepare_cohort_demog_data(pp_df)
-		#
-		# 	gt(to_print, row_group_as_column = TRUE, groupname_col = "group") |>
-		# 		tab_style(
-		# 			style = list(
-		# 				weight = "bold"
-		# 			),
-		# 			locations = cells_stub()
-		# 		) |>
-		# 		fmt_percent(
-		# 			columns = "%",
-		# 			decimals = 2
-		# 		) |>
-		# 		cols_nanoplot(columns = "pp_values",
-		# 									columns_x_vals = "pp_labels",
-		# 									autohide = TRUE,
-		# 									new_col_name = "Polypharmacy burden distribution")
-		# })
+		# 7. Demographic distribution tables
+		output$demodist_table <- render_gt({
+			pp_df <- pp_demog_table()
+			to_print <- prepare_cohort_demog_data(pp_df)
+
+			gt(to_print, row_group_as_column = TRUE, groupname_col = "group") |>
+				tab_style(
+					style = list(
+						weight = "bold"
+					),
+					locations = cells_stub()
+				) |>
+				fmt_percent(
+					columns = "%",
+					decimals = 2
+				) |>
+				cols_nanoplot(columns = "pp_values",
+											columns_x_vals = "pp_labels",
+											autohide = TRUE,
+											new_col_name = "Polypharmacy burden distribution")
+		})
 
 		output$pp_demodist_table <- render_gt({
 			pp_df <- pp_demog_table()

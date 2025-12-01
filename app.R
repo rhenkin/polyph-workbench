@@ -12,6 +12,7 @@ library(shinyWidgets)
 library(ggplot2)
 library(ppcor)
 library(bsicons)
+library(survival)
 
 #setDTthreads(6)
 
@@ -373,7 +374,8 @@ server <- function(input, output, session) {
 		stored_queries = stored_queries,
 		polypharmacy_threshold = right_card_inputs$polypharmacy_threshold,
 		earliest_treatment_end = right_card_inputs$earliest_treatment_end,
-		patient_filter = patientFilter_r
+		patient_filter = patientFilter_r,
+		bnf_filters = right_card_inputs
 	)
 
 	# Update analyzed patient count when outcome_prescriptions changes

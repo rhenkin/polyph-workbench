@@ -55,7 +55,7 @@ module_cca_copresc_ui <- function(id) {
 								),
 								selected = "or_diff"
 							),
-							checkboxInput(ns("forest_sort_asc"), "Lowest to highest?", value = TRUE)
+							checkboxInput(ns("forest_sort_asc"), "Lowest to highest?", value = FALSE)
 						),
 						vegawidgetOutput(ns("copresc_forest"), height = "800px"),
 						layout_column_wrap(width="100px",fixed_width = TRUE,
@@ -174,6 +174,10 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r, bnf_l
 
 		# Reset to page 1 when sort changes
 		observeEvent(input$forest_sort, {
+			current_page(1)
+		})
+
+		observeEvent(display_data(), {
 			current_page(1)
 		})
 

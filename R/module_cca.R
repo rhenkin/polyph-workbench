@@ -112,6 +112,13 @@ module_cca_ui <- function(id) {
 											card_header("Co-prescription Analysis"), card_body(
 												module_cca_copresc_ui(ns("copresc"))
 											)
+										),
+
+										card(
+											card_header("Conditional Logistic Regression"),
+											card_body(
+												module_cca_clogit_ui(ns("clogit"))
+											)
 										)
 										# card(
 										# 	card_header("Sensitivity Analysis"),
@@ -128,12 +135,13 @@ module_cca_ui <- function(id) {
 	)
 }
 
-module_cca_server <- function(id, prepared_study_data_r = NULL) {
+module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 	moduleServer(id, function(input, output, session) {
 		ns <- session$ns
 
 		# Reactive values for data storage
 		patient_data_r <- reactiveVal()
+		prescriptions_raw_r <- reactiveVal()
 		prescriptions_r <- reactiveVal()
 		prescriptions_aggregated_r <- reactiveVal()  # New: for BNF-aggregated prescriptions
 		ltcs_r <- reactiveVal()
@@ -212,7 +220,7 @@ module_cca_server <- function(id, prepared_study_data_r = NULL) {
 
 				# Store in reactive values
 				patient_data_r(patient_data)
-				prescriptions_r(filtered$prescriptions)
+				prescriptions_raw_r(filtered$prescriptions)
 				ltcs_r(filtered$ltcs)
 				cases_controls_r(matched_patids[, .(patid, index_date, substance, group)])
 
@@ -249,7 +257,7 @@ module_cca_server <- function(id, prepared_study_data_r = NULL) {
 
 				# Store in reactive values
 				patient_data_r(patient_data)
-				prescriptions_r(filtered$prescriptions)
+				prescriptions_raw_r(filtered$prescriptions)
 				ltcs_r(filtered$ltcs)
 				cases_controls_r(dataset$matched_patids[, .(patid, index_date, substance, group)])
 
@@ -263,6 +271,30 @@ module_cca_server <- function(id, prepared_study_data_r = NULL) {
 				)
 			}
 		}) |> bindEvent(input$load_dataset)
+
+
+		observe({
+			req(prescriptions_raw_r())
+
+			presc <- copy(prescriptions_raw_r())
+
+			# Apply BNF filters if available
+			if (!is.null(bnf_filters)) {
+				filtered_substances <- get_filtered_substances(
+					included_items = bnf_filters$included,
+					excluded_items = bnf_filters$excluded,
+					bnf_lookup = bnf_lookup
+				)
+
+				n_before <- uniqueN(presc$substance)
+				presc <- presc[substance %in% filtered_substances]
+				n_after <- uniqueN(presc$substance)
+
+				message(sprintf("BNF filters applied in CCA: %d → %d substances", n_before, n_after))
+			}
+
+			prescriptions_r(presc)
+		})
 
 		# NEW: Create BNF-aggregated prescriptions reactive
 		observe({
@@ -372,6 +404,13 @@ module_cca_server <- function(id, prepared_study_data_r = NULL) {
 			bnf_level = input$cca_bnf_level
 		)
 
+
+		module_cca_clogit_server(
+			id = "clogit",
+			patient_data_r = patient_data_r,
+			prescriptions_r = prescriptions_aggregated_r,
+			ltcs_r = ltcs_r
+		)
 		# module_cca_sensitivity_server(
 		# 	"sensitivity",
 		# 	patient_data_r,

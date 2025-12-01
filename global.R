@@ -11,7 +11,7 @@ if (dev == TRUE) {
 gold_patient <- fread("../data/gold_cp_patient.csv")
 gold_ltc <- fread("../data/gold_ltc.csv")
 gold_cp <- fread("../data/gold_cp.csv")
-gold_outcomes <- fread("../data/gold_outcomes.csv")
+gold_outcomes <- fread("../data/gold_outcomes2.csv")
 gold_acute_presc <- fread("../data/gold_acute_presc.csv", nrows = nrows_to_load)
 
 # Set keys for optimal performance
