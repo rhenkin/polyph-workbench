@@ -44,35 +44,71 @@ module_cca_ui <- function(id) {
 				navset_card_tab(
 					nav_panel(
 						title = "Overview",
-						layout_columns(col_widths = c(2,4,4,2),
+						layout_columns(col_widths = c(2,4,4),
 													 verticalLayout(
 													 	value_box(
-													 		showcase_layout = showcase_left_center(width = "200px", max_height = "150px"),
-													 		height = "150px",
+													 		showcase_layout = showcase_top_right(width = "200px", max_height = "150px"),
+													 		height = "130px",
 													 		title = "Cases",
 													 		value = textOutput(ns("value_box_cases")),
 													 		theme = "red",
-													 		showcase = bs_icon("people-fill")
+													 		showcase = bs_icon("people-fill",  size = "0.8em")
 													 	),
 													 	value_box(
-													 		showcase_layout = showcase_left_center(width = "200px", max_height = "150px"),
-													 		height = "150px",
+													 		showcase_layout = showcase_top_right(width = "200px", max_height = "150px"),
+													 		height = "130px",
 													 		title = "Controls",
 													 		value = textOutput(ns("value_box_controls")),
 													 		theme = "blue",
-													 		showcase = bs_icon("people-fill")
+													 		showcase = bs_icon("people-fill",  size = "0.8em")
 													 	)
 													 ),
 													 card(
 													 	card_header("Polypharmacy burden"),
 													 	card_body(
-													 		vegawidgetOutput(ns("pp_pyramid_plot"))
+													 		vegawidgetOutput(ns("pp_pyramid_plot")),
+													 		layout_columns(
+													 		value_box(
+													 			showcase_layout = showcase_top_right(width = "200px", max_height = "150px"),
+													 			height = "120px",
+													 			title = "Median PP",
+													 			value = textOutput(ns("value_box_median_pp_cases")),
+													 			theme = "red",
+													 			showcase = bs_icon("capsule-pill", size = "0.8em")
+													 		),
+													 		value_box(
+													 			showcase_layout = showcase_top_right(width = "200px", max_height = "150px"),
+													 			height = "120px",
+													 			title = "Median PP",
+													 			value = textOutput(ns("value_box_median_pp_controls")),
+													 			theme = "blue",
+													 			showcase = bs_icon("capsule-pill", size = "0.8em")
+													 		)
+													 		)
 													 	)
 													 ),
 													 card(
 													 	card_header("MLTC burden"),
 													 	card_body(
-													 		vegawidgetOutput(ns("mltc_pyramid_plot"))
+													 		vegawidgetOutput(ns("mltc_pyramid_plot")),
+													 		layout_columns(
+													 			value_box(
+													 				showcase_layout = showcase_top_right(width = "200px", max_height = "150px"),
+													 				height = "120px",
+													 				title = "Median LTCs",
+													 				value = textOutput(ns("value_box_median_ltc_cases")),
+													 				theme = "red",
+													 				showcase = bs_icon("heart-pulse-fill",  size = "0.8em")
+													 			),
+													 			value_box(
+													 				showcase_layout = showcase_top_right(width = "200px", max_height = "150px"),
+													 				height = "120px",
+													 				title = "Median LTCs",
+													 				value = textOutput(ns("value_box_median_ltc_controls")),
+													 				theme = "blue",
+													 				showcase = bs_icon("heart-pulse-fill",  size = "0.8em")
+													 			)
+													 		)
 													 	)
 													 )
 						),
@@ -95,7 +131,21 @@ module_cca_ui <- function(id) {
 									 				 card_body(
 									 				 	vegawidgetOutput(
 									 				 		ns("topten_substance_bar_plot")
-									 				 	))))
+									 				 	)))),
+						layout_columns(col_widths = c(4,4,-4),
+							card(full_screen = TRUE,
+									 card_header("IMD Quintile Distribution"),
+									 card_body(
+									 	vegawidgetOutput(ns("imd_dist_plot"))
+									 )
+							),
+							card(full_screen = TRUE,
+									 card_header("Ethnicity Distribution"),
+									 card_body(
+									 	vegawidgetOutput(ns("eth_dist_plot"))
+									 )
+							)
+						)
 					),
 					nav_panel(title = "Advanced",
 										card(
@@ -323,15 +373,37 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 			prettyNum(nrow(patient_data_r()[treatment == 0]), big.mark = ",")
 		})
 
+		# New median value boxes
+		output$value_box_median_pp_cases <- renderText({
+			req(patient_data_r())
+			median(patient_data_r()[treatment == 1, pp])
+		})
+
+		output$value_box_median_pp_controls <- renderText({
+			req(patient_data_r())
+			median(patient_data_r()[treatment == 0, pp])
+
+		})
+
+		output$value_box_median_ltc_cases <- renderText({
+			req(patient_data_r())
+			median(patient_data_r()[treatment == 1, n_ltc])
+		})
+
+		output$value_box_median_ltc_controls <- renderText({
+			req(patient_data_r())
+			median(patient_data_r()[treatment == 0, n_ltc])
+		})
+
 		# Pyramid plots
 		output$pp_pyramid_plot <- renderVegawidget({
 			req(patient_data_r())
-			create_burden_pyramid(patient_data_r(), "pp")
+			create_burden_pyramid(patient_data_r(), "pp", title = NULL, height = 250)
 		})
 
 		output$mltc_pyramid_plot <- renderVegawidget({
 			req(patient_data_r())
-			create_burden_pyramid(patient_data_r(), "n_ltc")
+			create_burden_pyramid(patient_data_r(), "n_ltc", title = NULL, height = 250)
 		})
 
 		# Top substances plot - now uses aggregated prescriptions
@@ -382,6 +454,56 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 				"substance",
 				title = "Top 10 Background medications most prevalent in cases"
 			) |> as_vegaspec()
+		})
+
+		# IMD distribution plot
+		output$imd_dist_plot <- renderVegawidget({
+			req(patient_data_r())
+
+			# Calculate frequency stats for IMD quintile
+			freq_data <- patient_data_r()[, .N, by = .(imd_quintile, treatment)]
+			freq_data[, group := ifelse(treatment == 1, "case", "control")]
+
+			# Get group totals
+			group_totals <- patient_data_r()[, .(total = .N), by = treatment]
+			freq_data[group_totals, pct := round(N / total * 100, 2), on = "treatment"]
+
+			# Prepare for grouped bar plot
+			freq_data[, `:=`(
+				max_pct = max(pct),
+				diff_label = sprintf("+%.1f%%",
+														 abs(pct[group == "case"] - pct[group == "control"]))
+			), by = imd_quintile]
+
+			grouped_bar_plot(freq_data, "imd_quintile", height = 250, width = 300) |>
+				as_vegaspec()
+		})
+
+		# Ethnicity distribution plot
+		output$eth_dist_plot <- renderVegawidget({
+			req(patient_data_r())
+
+			# Calculate frequency stats for ethnicity
+			freq_data <- patient_data_r()[, .N, by = .(eth_group, treatment)]
+			freq_data[, group := ifelse(treatment == 1, "case", "control")]
+
+			# Get group totals
+			group_totals <- patient_data_r()[, .(total = .N), by = treatment]
+			freq_data[group_totals, pct := round(N / total * 100, 2), on = "treatment"]
+
+			# Prepare for grouped bar plot
+			freq_data[, `:=`(
+				max_pct = max(pct),
+				diff_label = sprintf("+%.1f%%",
+														 abs(pct[group == "case"] - pct[group == "control"]))
+			), by = eth_group]
+
+			# Truncate long ethnicity labels
+			freq_data[nchar(eth_group) > 20,
+								eth_group := paste0(strtrim(eth_group, 20), "...")]
+
+			grouped_bar_plot(freq_data, "eth_group", height = 250, width = 300) |>
+				as_vegaspec()
 		})
 
 		module_cca_sociodemographics_server(

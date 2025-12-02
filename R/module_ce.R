@@ -94,7 +94,7 @@ module_ce_server <- function(id,
       	req(outcome_prescriptions())
       	!is.null(selected_outcome())
       })
-      outputOptions(output, "data_loaded", suspendWhenHidden = FALSE)
+      outputOptions(session$output, "data_loaded", suspendWhenHidden = FALSE)
 
       # Overview tab outputs
       output$value_box_cases <- renderText({

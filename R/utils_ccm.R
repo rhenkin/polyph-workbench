@@ -47,12 +47,12 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 	# ========================================================================
 
 	# Cases: use the filtered outcome_prescriptions
-	cases_presc <- unique(cases[, .(patid, index_date, eventdate = outcome_date, index_age_days = index_age * 365.25)])
+	cases_presc <- unique(cases[, .(patid, index_date, eventdate = outcome_date, index_age_days = index_age * 365.25, strata)])
 	cases_presc <- cases_presc[gold_cp, on = "patid", nomatch = 0][start_date <= index_date & stop_date >= index_date - 84]
 	cases_presc[, treatment := 1]
 
 	# Controls: get prescriptions active at their index date
-	control_index_lookup <- unique(controls[, .(patid, index_date = control_index_date)])
+	control_index_lookup <- unique(controls[, .(patid, index_date = control_index_date, strata)])
 
 	# Get all CP prescriptions for controls that were active at index date
 	controls_presc_raw <- control_index_lookup[gold_cp, on = "patid", nomatch = 0][
@@ -75,41 +75,44 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
     # debug_dt_for_rbind(cases_presc[, .(patid, eventdate, outcome_age, substance, start_date, stop_date, duration, treatment)], "cases_presc")
     # debug_dt_for_rbind(controls_presc[, .(patid, eventdate, outcome_age, substance, start_date, stop_date, duration, treatment)], "controls_presc")
 	all_prescriptions <- rbindlist(list(
-		cases_presc[, .(patid, eventdate, index_age_days, substance, start_date, stop_date, duration, treatment)],
-		controls_presc[, .(patid, eventdate, index_age_days, substance, start_date, stop_date, duration, treatment)]
+		cases_presc[, .(patid, eventdate, index_age_days, substance, start_date, stop_date, duration, treatment, strata)],
+		controls_presc[, .(patid, eventdate, index_age_days, substance, start_date, stop_date, duration, treatment, strata)]
 	), fill = TRUE)
 	all_prescriptions[, study_name := study_name]
-    setkey(all_prescriptions, patid)
+  setkey(all_prescriptions, patid, strata)
 
 	# ========================================================================
 	# Create matched patient data
 	# ========================================================================
 
-	cases_patient_data <- gold_patient[patid %in% case_patids]
-	cases_patient_data[, treatment := 1]
+  # Add strata to patient data
+  cases_strata_lookup <- unique(cases[, .(patid, strata)])
+  controls_strata_lookup <- unique(controls[, .(patid, strata)])
 
-	controls_patient_data <- gold_patient[patid %in% control_patids]
-	controls_patient_data[, treatment := 0]
+  cases_patient_data <- gold_patient[patid %in% case_patids]
+  cases_patient_data <- merge(cases_patient_data, cases_strata_lookup, by = "patid")
+  cases_patient_data[, treatment := 1]
 
+  controls_patient_data <- gold_patient[patid %in% control_patids]
+  controls_patient_data <- merge(controls_patient_data, controls_strata_lookup, by = "patid")
+  controls_patient_data[, treatment := 0]
 
-    # debug_dt_for_rbind(cases_patient_data, "cases_patient_data")
-    # debug_dt_for_rbind(controls_patient_data, "controls_patient_data")
-	all_patient_data <- rbindlist(list(cases_patient_data, controls_patient_data))
-	all_patient_data[, study_name := study_name]
-	setkey(all_patient_data, patid)
-
+  all_patient_data <- rbindlist(list(cases_patient_data, controls_patient_data))
+  all_patient_data[, study_name := study_name]
+  setkey(all_patient_data, patid, strata)
 	# ========================================================================
 	# Create matched LTC data
 	# ========================================================================
 
 	# Cases: get all LTC data before their outcome
-	cases_index <- unique(cases[, .(patid, index_date)])
-	cases_ltc <- cases_index[gold_ltc, .(patid, eventdate, age_days, term), on = .(patid, index_date > eventdate), nomatch = 0]
+	cases_index <- unique(cases[, .(patid, index_date, strata)])
+	cases_ltc <- cases_index[gold_ltc, .(patid, eventdate, age_days, term, strata), on = .(patid, index_date > eventdate), nomatch = 0]
 
 	cases_ltc[, treatment := 1]
 
-	# Controls: get LTC data before their control index date
-	controls_ltc <- control_index_lookup[gold_ltc, .(patid, eventdate, age_days, term), on = .(patid, index_date > eventdate), nomatch = 0]
+	controls_index <- unique(controls[, .(patid, index_date = control_index_date, strata)])
+	controls_ltc <- controls_index[gold_ltc, .(patid, eventdate, age_days, term, strata),
+																 on = .(patid, index_date > eventdate), nomatch = 0]
 	controls_ltc[, treatment := 0]
 
 	# Combine LTC data
@@ -117,11 +120,11 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
     # debug_dt_for_rbind(controls_ltc[, .(patid, eventdate, age_days, term, treatment)], "controls_ltc")
 
 	all_ltc <- rbindlist(list(
-		cases_ltc[, .(patid, eventdate, age_days, term, treatment)],
-		controls_ltc[, .(patid, eventdate, age_days, term, treatment)]
+		cases_ltc[, .(patid, eventdate, age_days, term, treatment, strata)],
+		controls_ltc[, .(patid, eventdate, age_days, term, treatment, strata)]
 	), fill = TRUE)
 	all_ltc[, study_name := study_name]
-    setkey(all_ltc, patid, eventdate)
+  setkey(all_ltc, patid, strata, eventdate)
 
 	# ========================================================================
 	# Create matched_patids for backwards compatibility
@@ -134,6 +137,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 		outcome_date,
 		substance,
 		treatment = 1,
+		strata,
 		study_name = study_name
 	)]
 
@@ -144,13 +148,14 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 		outcome_date = NA,
 		substance,
 		treatment = 0,
+		strata,
 		study_name = study_name
 	)]
 
 #     debug_dt_for_rbind(matched_cases, "matched_cases")
 # 	debug_dt_for_rbind(matched_controls, "matched_controls")
 	matched_patids <- rbindlist(list(matched_cases, matched_controls), use.names = TRUE)
-  setkey(matched_patids, patid)
+  setkey(matched_patids, strata, patid)
 
 	# ========================================================================
 	# Create study metadata

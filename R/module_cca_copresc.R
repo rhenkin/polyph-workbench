@@ -15,7 +15,7 @@ module_cca_copresc_ui <- function(id) {
 		open = FALSE,
 		accordion_panel(
 			title = "Results",
-			value = "copresc_results",
+			value = "copresc_results_panel",
 			layout_columns(
 				col_widths = c(1,1,1),
 				numericInput(
@@ -104,37 +104,47 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r, bnf_l
 		ns <- session$ns
 
 		# Reactive to store calculated results
-		copresc_results <- reactiveVal(NULL)
+		#copresc_results <- reactiveVal(NULL)
 
 		# Reactive value for current page
 		current_page <- reactiveVal(1)
 
 		# Calculate co-prescription ORs when button clicked
-		observe({
-			req(prescriptions_r(), patient_data_r())
+		# observe({
+		# 	req(prescriptions_r(), patient_data_r())
+		#
+		# 	tryCatch({
+		# 		results <- calculate_coprescription_ors(
+		# 			prescriptions = prescriptions_r(),
+		# 			min_prevalence = input$min_prevalence / 100,
+		# 			min_coprescription = input$min_coprescription / 100
+		# 		)
+		#
+		# 		copresc_results(results)
+		#
+		# 		showNotification(
+		# 			sprintf("Analysis complete: %d drug pairs found",
+		# 							nrow(results)),
+		# 			type = "message",
+		# 			duration = 5
+		# 		)
+		# 	}, error = function(e) {
+		# 		showNotification(
+		# 			paste("Error calculating ORs:", e$message),
+		# 			type = "error",
+		# 			duration = 10
+		# 		)
+		# 	})
+		# })
 
-			tryCatch({
-				results <- calculate_coprescription_ors(
-					prescriptions = prescriptions_r(),
-					min_prevalence = input$min_prevalence / 100,
-					min_coprescription = input$min_coprescription / 100
-				)
-
-				copresc_results(results)
-
-				showNotification(
-					sprintf("Analysis complete: %d drug pairs found",
-									nrow(results)),
-					type = "message",
-					duration = 5
-				)
-			}, error = function(e) {
-				showNotification(
-					paste("Error calculating ORs:", e$message),
-					type = "error",
-					duration = 10
-				)
-			})
+		copresc_results <- reactive({
+			req(prescriptions_r())
+			message("Recalculating co-presc ors")
+			calculate_coprescription_ors(
+				prescriptions = prescriptions_r(),
+				min_prevalence = input$min_prevalence / 100,
+				min_coprescription = input$min_coprescription / 100
+			)
 		})
 
 		display_data <- reactive({
@@ -179,7 +189,7 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r, bnf_l
 
 		observeEvent(display_data(), {
 			current_page(1)
-		})
+		}, suspended = TRUE)
 
 		# Previous page button
 		observeEvent(input$prev_page, {
@@ -334,6 +344,10 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r, bnf_l
 
 			create_copresc_forest_plot(data)
 		})
+
+		outputOptions(session$output, "copresc_table", suspendWhenHidden = TRUE)
+		outputOptions(session$output, "copresc_forest", suspendWhenHidden = TRUE)
+		outputOptions(session$output, "copresc_heatmap", suspendWhenHidden = TRUE)
 
 		# Download handler
 		output$download_table <- downloadHandler(

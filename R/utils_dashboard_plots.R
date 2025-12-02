@@ -12,7 +12,7 @@ grouped_bar_plot <- function(df, y_var, height = 250, width = 300, title = NULL)
 		layer = list(
 			# Bar layer
 			list(
-				mark = "bar",
+				mark = list(type = "bar", tooltip = TRUE),
 				encoding = list(
 					x = list(
 						field = "pct",

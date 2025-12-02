@@ -51,7 +51,7 @@ prepare_clogit_data <- function(patient_data, prescriptions, ltcs,
 																medications, selected_ltcs) {
 
 	# Start with patient data
-	base_data <- copy(patient_data[, .(patid, treatment, sex, pp_group, mltc_group)])
+	base_data <- copy(patient_data[, .(patid, treatment, sex, pp_group, mltc_group, strata)])
 
 	# Create binary indicators for medications
 	med_indicators <- create_medication_indicators(prescriptions, medications)
@@ -210,9 +210,9 @@ fit_single_clogit_model <- function(model_data, medication, selected_ltcs) {
 	}
 
 	# Build formula: treatment ~ medication + ltcs + sex + pp_group + mltc_group
-	covariate_terms <- c(med_col, ltc_cols_with_variation, "sex", "pp_group", "mltc_group")
-	formula_str <- paste0("treatment ~ ", paste(covariate_terms, collapse = " + "))
-
+	covariate_terms <- c(med_col, ltc_cols_with_variation) #, "sex", "pp_group", "mltc_group")
+	model_data$group <- factor(model_data$strata)
+	formula_str <- paste0("treatment ~ ", paste(covariate_terms, collapse = " + "), "+ factor(group)")
 	# Fit model
 	tryCatch({
 		model <- glm(
@@ -221,16 +221,16 @@ fit_single_clogit_model <- function(model_data, medication, selected_ltcs) {
 			family = binomial(link = "logit")
 		)
 
-		# Extract results for the medication (first coefficient after intercept)
+		# Extract results for the medication
 		coef_summary <- summary(model)$coefficients
 		medication_row <- coef_summary[med_col, , drop = FALSE]
 
 		# Calculate OR and CI
-		or <- exp(medication_row[1, "Estimate"])
-		se <- medication_row[1, "Std. Error"]
+		or <- exp(medication_row[1, "Estimate"])  # clogit uses "coef" not "Estimate"
+		se <- medication_row[1, "Std. Error"]   # clogit uses "se(coef)" not "Std. Error"
 		ci_lower <- exp(medication_row[1, "Estimate"] - 1.96 * se)
 		ci_upper <- exp(medication_row[1, "Estimate"] + 1.96 * se)
-		p_value <- medication_row[1, "Pr(>|z|)"]
+		p_value <- medication_row[1, "Pr(>|z|)"]  # This one stays the same
 
 		# Count cases and controls with medication
 		n_cases <- model_data[get(med_col) == 1 & treatment == 1, .N]

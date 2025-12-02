@@ -106,7 +106,7 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 
 				# Update UI
 				output$show_results <- reactive({ TRUE })
-				outputOptions(output, "show_results", suspendWhenHidden = FALSE)
+				outputOptions(session$output, "show_results", suspendWhenHidden = FALSE)
 
 				progress$set(value = 1)
 				showNotification("Matched cohort created successfully!",

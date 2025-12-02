@@ -3,7 +3,7 @@
 #' @param burden_col Name of burden column (pp or n_ltc)
 #' @param title Plot title
 #' @return vegaspec object
-create_burden_pyramid <- function(patient_data, burden_col = "pp", title = "Burden") {
+create_burden_pyramid <- function(patient_data, burden_col = "pp", title = "Burden", ...) {
   upper_band <- round(quantile(patient_data[[burden_col]], 0.75) * 1.75)
 
   band_col <- paste0(burden_col, "_band")
@@ -27,7 +27,7 @@ create_burden_pyramid <- function(patient_data, burden_col = "pp", title = "Burd
     band_col,
     rev(c(2:upper_band, paste0(upper_band, "+"))),
     side_width = 175,
-    title = title
+    title = title, ...
   ) |> as_vegaspec()
 }
 

@@ -68,7 +68,7 @@ module_cca_clogit_ui <- function(id) {
 
 				virtualSelectInput(
 					ns("selected_meds"),
-					"Select medications to model:",
+					"Select medications to model (leave empty for all):",
 					choices = NULL,
 					multiple = TRUE,
 					search = TRUE,
@@ -85,11 +85,11 @@ module_cca_clogit_ui <- function(id) {
 					h4("Results"),
 					# Add model description
 					div(
-						class = "alert alert-info",
+						class = "alert alert-light",
 						style = "margin-bottom: 15px;",
 						tags$strong("Model:"), " Logistic regression adjusting for matching variables and selected LTCs",
 						tags$br(),
-						tags$code("treatment ~ medication + LTCs + sex + pp_group + mltc_group")
+						tags$code("treatment ~ medication + LTCs + stratum")
 					),
 					downloadButton(ns("download_results"), "Download Results", class = "btn-sm btn-secondary"),
 					br(), br(),
@@ -142,7 +142,7 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			filtered_ltcs_r(filtered)
 
 			output$ltcs_filtered <- reactive({ TRUE })
-			outputOptions(output, "ltcs_filtered", suspendWhenHidden = FALSE)
+			outputOptions(session$output, "ltcs_filtered", suspendWhenHidden = FALSE)
 
 			showNotification(
 				sprintf("%d LTCs selected for adjustment", nrow(filtered)),
@@ -236,7 +236,7 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 				clogit_results_r(results)
 
 				output$results_available <- reactive({ TRUE })
-				outputOptions(output, "results_available", suspendWhenHidden = FALSE)
+				outputOptions(session$output, "results_available", suspendWhenHidden = FALSE)
 
 				removeNotification("clogit_notification")
 				showNotification(
