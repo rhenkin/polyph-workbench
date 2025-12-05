@@ -350,7 +350,7 @@ sample_controls_by_strata <- function(eligible_pool, cases, match_ratio) {
 
 	# Remove duplicate patients (keep random occurrence)
 	setorder(all_controls, patid, prescription_date)
-	all_controls <- all_controls[, .SD[sample(.N, 1)], by = patid]
+	#all_controls <- all_controls[, .SD[sample(.N, 1)], by = patid]
 
 	message(sprintf("Controls sampled: %d (unique patients: %d)",
 									nrow(all_controls), uniqueN(all_controls$patid)))

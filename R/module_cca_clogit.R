@@ -75,6 +75,24 @@ module_cca_clogit_ui <- function(id) {
 					dropboxWrapper = "body"
 				),
 
+				checkboxInput(
+					ns("include_interactions"),
+					"Model medication interactions (pairwise)",
+					value = FALSE
+				),
+
+				conditionalPanel(
+					condition = "input.include_interactions",
+					ns = ns,
+					div(
+						class = "alert alert-info",
+						style = "margin-top: 10px;",
+						tags$strong("Note: "),
+						"Interaction models will fit separate models for each medication pair. ",
+						"Selecting specific medications is strongly recommended to avoid long computation times."
+					)
+				),
+
 				actionButton(ns("run_clogit"), "Run Models", class = "btn-primary"),
 
 				hr(),
@@ -89,7 +107,7 @@ module_cca_clogit_ui <- function(id) {
 						style = "margin-bottom: 15px;",
 						tags$strong("Model:"), " Logistic regression adjusting for matching variables and selected LTCs",
 						tags$br(),
-						tags$code("treatment ~ medication + LTCs + stratum")
+						uiOutput(ns("model_formula_text"))
 					),
 					downloadButton(ns("download_results"), "Download Results", class = "btn-sm btn-secondary"),
 					br(), br(),
@@ -191,6 +209,15 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			)
 		})
 
+		# Dynamic model formula text
+		output$model_formula_text <- renderUI({
+			if (input$include_interactions) {
+				tags$code("treatment ~ med1 + med2 + med1:med2 + LTCs + stratum (reporting interaction term only)")
+			} else {
+				tags$code("treatment ~ medication + LTCs + stratum")
+			}
+		})
+
 		# Run conditional logistic regression
 		observeEvent(input$run_clogit, {
 			req(filtered_ltcs_r(), patient_data_r(), prescriptions_r(), ltcs_r())
@@ -221,38 +248,82 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 				return()
 			}
 
-			showNotification("Running logistic regression models...",
-											 type = "message", duration = NULL, id = "clogit_notification")
+			# Check if running interaction models
+			if (input$include_interactions) {
+				# Generate all pairs
+				med_pairs <- combn(medications_to_model, 2, simplify = FALSE)
 
-			tryCatch({
-				results <- run_conditional_logistic_models(
-					medications = medications_to_model,
-					selected_ltcs = filtered_ltcs_r()$term,
-					patient_data = patient_data_r(),
-					prescriptions = prescriptions_r(),
-					ltcs = ltcs_r()
-				)
-
-				clogit_results_r(results)
-
-				output$results_available <- reactive({ TRUE })
-				outputOptions(session$output, "results_available", suspendWhenHidden = FALSE)
-
-				removeNotification("clogit_notification")
 				showNotification(
-					sprintf("Models fitted for %d medications", length(medications_to_model)),
+					sprintf("Running interaction models for %d medication pairs...", length(med_pairs)),
 					type = "message",
-					duration = 3
+					duration = NULL,
+					id = "clogit_notification"
 				)
 
-			}, error = function(e) {
-				removeNotification("clogit_notification")
-				showNotification(
-					paste("Error running models:", e$message),
-					type = "error",
-					duration = 10
-				)
-			})
+				tryCatch({
+					results <- run_interaction_models(
+						med_pairs = med_pairs,
+						selected_ltcs = filtered_ltcs_r()$term,
+						patient_data = patient_data_r(),
+						prescriptions = prescriptions_r(),
+						ltcs = ltcs_r()
+					)
+
+					clogit_results_r(results)
+
+					output$results_available <- reactive({ TRUE })
+					outputOptions(session$output, "results_available", suspendWhenHidden = FALSE)
+
+					removeNotification("clogit_notification")
+					showNotification(
+						sprintf("Interaction models fitted for %d medication pairs", length(med_pairs)),
+						type = "message",
+						duration = 3
+					)
+
+				}, error = function(e) {
+					removeNotification("clogit_notification")
+					showNotification(
+						paste("Error running interaction models:", e$message),
+						type = "error",
+						duration = 10
+					)
+				})
+			} else {
+				# Original single medication models
+				showNotification("Running logistic regression models...",
+												 type = "message", duration = NULL, id = "clogit_notification")
+
+				tryCatch({
+					results <- run_conditional_logistic_models(
+						medications = medications_to_model,
+						selected_ltcs = filtered_ltcs_r()$term,
+						patient_data = patient_data_r(),
+						prescriptions = prescriptions_r(),
+						ltcs = ltcs_r()
+					)
+
+					clogit_results_r(results)
+
+					output$results_available <- reactive({ TRUE })
+					outputOptions(session$output, "results_available", suspendWhenHidden = FALSE)
+
+					removeNotification("clogit_notification")
+					showNotification(
+						sprintf("Models fitted for %d medications", length(medications_to_model)),
+						type = "message",
+						duration = 3
+					)
+
+				}, error = function(e) {
+					removeNotification("clogit_notification")
+					showNotification(
+						paste("Error running models:", e$message),
+						type = "error",
+						duration = 10
+					)
+				})
+			}
 		})
 
 		# Display results table
@@ -265,60 +336,75 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			total_cases <- patient_data_r()[treatment == 1, .N]
 			total_controls <- patient_data_r()[treatment == 0, .N]
 
-			# Add prevalence columns
-			results[, case_prev := round(100 * n_cases / total_cases, 2)]
-			results[, control_prev := round(100 * n_controls / total_controls, 2)]
+			# Check if interaction results or single medication results
+			if ("med1" %in% names(results)) {
+				# Interaction results
+				reactable(
+					results[, .(med1, med2, interaction_OR, interaction_CI_lower, interaction_CI_upper,
+											interaction_p, pct_cases_both, pct_controls_both,
+											n_cases_both, n_controls_both, n_ltc_covariates, convergence)],
+					columns = list(
+						med1 = colDef(name = "Medication 1", minWidth = 150),
+						med2 = colDef(name = "Medication 2", minWidth = 150),
+						interaction_OR = colDef(name = "Interaction OR", format = colFormat(digits = 3)),
+						interaction_CI_lower = colDef(name = "CI Lower", format = colFormat(digits = 3)),
+						interaction_CI_upper = colDef(name = "CI Upper", format = colFormat(digits = 3)),
+						interaction_p = colDef(name = "P-value", format = colFormat(digits = 4)),
+						pct_cases_both = colDef(name = "Cases % (both)", format = colFormat(digits = 2)),
+						pct_controls_both = colDef(name = "Controls % (both)", format = colFormat(digits = 2)),
+						n_cases_both = colDef(show = FALSE, name = "Cases n (both)", format = colFormat(digits = 0)),
+						n_controls_both = colDef(show = FALSE, name = "Controls n (both)", format = colFormat(digits = 0)),
+						n_ltc_covariates = colDef(show = FALSE, name = "# LTC Covariates", format = colFormat(digits = 0)),
+						convergence = colDef(show = FALSE, name = "Convergence")
+					),
+					defaultPageSize = 20,
+					searchable = TRUE,
+					filterable = TRUE,
+					defaultSorted = "interaction_p",
+					compact = TRUE
+				)
+			} else {
+				# Single medication results (original)
+				# Add prevalence columns
+				results[, case_prev := round(100 * n_cases / total_cases, 2)]
+				results[, control_prev := round(100 * n_controls / total_controls, 2)]
 
-			reactable(
-				results[, .(medication, OR, CI_lower, CI_upper, p_value,
-										case_prev, control_prev, n_ltc_covariates, convergence)],
-				columns = list(
-					medication = colDef(name = "Medication", minWidth = 200),
-					OR = colDef(
-						name = "Adjusted OR",
-						format = colFormat(digits = 2),
-						style = function(value) {
-							if (is.na(value)) return(NULL)
-							if (value > 1) list(color = "#e74c3c", fontWeight = "bold")
-							else list(color = "#3498db", fontWeight = "bold")
-						}
+				reactable(
+					results[, .(medication, OR, CI_lower, CI_upper, p_value,
+											case_prev, control_prev, n_cases, n_controls,
+											n_ltc_covariates, convergence)],
+					columns = list(
+						medication = colDef(name = "Medication", minWidth = 200),
+						OR = colDef(name = "OR", format = colFormat(digits = 3)),
+						CI_lower = colDef(name = "CI Lower", format = colFormat(digits = 3)),
+						CI_upper = colDef(name = "CI Upper", format = colFormat(digits = 3)),
+						p_value = colDef(name = "P-value", format = colFormat(digits = 4)),
+						case_prev = colDef(name = "Case %", format = colFormat(digits = 2)),
+						control_prev = colDef(name = "Control %", format = colFormat(digits = 2)),
+						n_cases = colDef(show = FALSE, name = "Cases (n)", format = colFormat(digits = 0)),
+						n_controls = colDef(show = FALSE, name = "Controls (n)", format = colFormat(digits = 0)),
+						n_ltc_covariates = colDef(show = FALSE, name = "# LTC Covariates", format = colFormat(digits = 0)),
+						convergence = colDef(show = FALSE, name = "Convergence")
 					),
-					CI_lower = colDef(name = "CI Lower", format = colFormat(digits = 2)),
-					CI_upper = colDef(name = "CI Upper", format = colFormat(digits = 2)),
-					p_value = colDef(
-						name = "P-value",
-						format = colFormat(digits = 4),
-						style = function(value) {
-							if (is.na(value)) return(NULL)
-							if (value < 0.05) list(fontWeight = "bold")
-						}
-					),
-					case_prev = colDef(
-						name = "Case Prevalence (%)",
-						format = colFormat(digits = 2)
-					),
-					control_prev = colDef(
-						name = "Control Prevalence (%)",
-						format = colFormat(digits = 2)
-					),
-					n_ltc_covariates = colDef(name = "# LTC Covariates"),
-					convergence = colDef(show = FALSE, name = "Status")
-				),
-				defaultSorted = "p_value",
-				searchable = TRUE,
-				defaultPageSize = 20,
-				striped = TRUE,
-				highlight = TRUE
-			)
+					defaultPageSize = 20,
+					searchable = TRUE,
+					filterable = TRUE,
+					defaultSorted = "p_value",
+					compact = TRUE
+				)
+			}
 		})
 
-		# Download handler
+		# Download results
 		output$download_results <- downloadHandler(
 			filename = function() {
-				paste0("clogit_results_", Sys.Date(), ".csv")
+				if (input$include_interactions) {
+					paste0("clogit_interaction_results_", Sys.Date(), ".csv")
+				} else {
+					paste0("clogit_results_", Sys.Date(), ".csv")
+				}
 			},
 			content = function(file) {
-				req(clogit_results_r())
 				fwrite(clogit_results_r(), file)
 			}
 		)

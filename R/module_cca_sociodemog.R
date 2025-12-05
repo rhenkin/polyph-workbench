@@ -5,6 +5,7 @@ module_cca_sociodemographics_ui <- function(id) {
 		accordion_panel(
 			title = "Table",
 			value = "demog_tables",
+			div("Using number of unique patients. A patient can contribute with 1 or more observations."),
 			gt::gt_output(ns("sociodemog_table"))
 		)
 	)
@@ -21,8 +22,8 @@ module_cca_sociodemographics_server <- function(id, patient_data_r) {
 			patient_df <- patient_data_r()
 
 			# Calculate totals
-			cases_total <- patient_df[treatment == 1, .N]
-			controls_total <- patient_df[treatment == 0, .N]
+			cases_total <- uniqueN(patient_df[treatment == 1, patid])
+			controls_total <- uniqueN(patient_df[treatment == 0, patid])
 
 			# Define demographic groups to process
 			demog_groups <- list(
@@ -36,14 +37,14 @@ module_cca_sociodemographics_server <- function(id, patient_data_r) {
 			# Process each demographic group
 			results_list <- lapply(demog_groups, function(g) {
 				# Calculate for cases (treatment == 1)
-				cases_stats <- patient_df[treatment == 1, .N, by = c(g$var)]
+				cases_stats <- patient_df[treatment == 1, .(N = uniqueN(patid)), by = c(g$var)]
 				cases_stats[, group := g$label]
 				cases_stats[, cases_pct := round(N / cases_total * 100, 1)]
 				cases_stats[, cases_value := sprintf("%d (%.1f%%)", N, cases_pct)]
 				setnames(cases_stats, old = g$var, new = "category")
 
 				# Calculate for controls (treatment == 0)
-				controls_stats <- patient_df[treatment == 0, .N, by = c(g$var)]
+				controls_stats <- patient_df[treatment == 0,.(N = uniqueN(patid)), by = c(g$var)]
 				controls_stats[, controls_pct := round(N / controls_total * 100, 1)]
 				controls_stats[, controls_value := sprintf("%d (%.1f%%)", N, controls_pct)]
 				setnames(controls_stats, old = g$var, new = "category")

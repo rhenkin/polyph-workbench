@@ -31,18 +31,18 @@ load_cca_dataset <- function(dataset_path) {
 #' @param lookback_days Number of days before index_date to include prescriptions
 #' @return List with filtered prescriptions and ltcs
 filter_by_index_date <- function(prescriptions, ltcs, matched_patids, lookback_days = 84) {
-  umatched_patids <- unique(matched_patids[, .(patid, index_date, group)])
+  umatched_patids <- unique(matched_patids[, .(patid, index_date, group, strata)])
 
   ltcs_filtered <- ltcs[umatched_patids,
-    .(patid, eventdate, age_days, term, group),
-    on = .(patid, eventdate < index_date),
+    .(patid, eventdate, age_days, term, group, strata),
+    on = .(patid, strata, eventdate < index_date),
     nomatch = 0
   ]
 
   presc_filtered <- prescriptions[umatched_patids,
     .(patid, substance = x.substance, index_date = index_date,
-      start_date = x.start_date, stop_date = x.stop_date, duration, group),
-    on = .(patid, start_date <= index_date),
+      start_date = x.start_date, stop_date = x.stop_date, duration, group, strata),
+    on = .(patid, strata, start_date <= index_date),
     nomatch = 0
   ]
 
@@ -57,7 +57,7 @@ filter_by_index_date <- function(prescriptions, ltcs, matched_patids, lookback_d
 #' @param ltcs data.table of long-term conditions
 #' @return Updated patient_data with pp_group and mltc_group columns
 add_burden_groups <- function(patient_data, prescriptions, ltcs) {
-  prescriptions_n <- prescriptions[, list(pp = .N), patid]
+  prescriptions_n <- prescriptions[, list(pp = .N), .(patid, strata)]
   prescriptions_n <- create_value_groups(
     prescriptions_n,
     breaks = c(2, 5, 10),
@@ -66,7 +66,7 @@ add_burden_groups <- function(patient_data, prescriptions, ltcs) {
     group_col = "pp_group"
   )
 
-  ltcs_n <- ltcs[, list(n_ltc = .N), patid]
+  ltcs_n <- ltcs[, list(n_ltc = .N), .(patid, strata)]
   ltcs_n <- create_value_groups(
     ltcs_n,
     breaks = c(2, 5, 10),
@@ -75,8 +75,8 @@ add_burden_groups <- function(patient_data, prescriptions, ltcs) {
     group_col = "mltc_group"
   )
 
-  patient_data <- patient_data[prescriptions_n]
-  patient_data <- patient_data[ltcs_n]
+  patient_data <- merge(patient_data, prescriptions_n, by = c("patid", "strata"))
+  patient_data <- merge(patient_data, ltcs_n, by = c("patid", "strata"))
 
   patient_data
 }
@@ -86,8 +86,10 @@ add_burden_groups <- function(patient_data, prescriptions, ltcs) {
 #' @param item_col Name of the column containing items (term or substance)
 #' @return data.table with N, pct by group and item
 calculate_frequency_stats <- function(data, item_col) {
-  freq <- data[, .(N = uniqueN(patid)), by = c("group", item_col)]
-  group_totals <- data[, .(total = uniqueN(patid)), by = group]
+  # freq <- data[, .(N = uniqueN(patid)), by = c("group", item_col)]
+  # group_totals <- data[, .(total = uniqueN(patid)), by = group]
+  freq <- data[, .(N = uniqueN(.SD,by = c("patid","strata"))), by = c("group", item_col)]
+  group_totals <- data[,.(total = uniqueN(.SD,by = c("patid","strata"))),group]
   freq[group_totals, pct := round(N / total * 100, 2), on = "group"]
   setorder(freq, -pct)
   freq

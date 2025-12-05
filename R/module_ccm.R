@@ -131,7 +131,7 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 			})
 
 			output$vb_controls_n <- renderText({
-				prettyNum(uniqueN(controls$patid), big.mark = ",")
+				prettyNum(nrow(controls), big.mark = ",")
 			})
 
 
