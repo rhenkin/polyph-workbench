@@ -45,7 +45,7 @@ create_top_substances_plot <- function(cases_controls, n_top = 10, height = 250,
   }
 
   cases_controls_n <- cases_controls[, .N, .(group, substance)]
-  group_totals <- cases_controls[, .(total = uniqueN(patid)), by = group]
+  group_totals <- cases_controls[, .(total = .N), by = group]
   cases_controls_n[group_totals, pct := round(N / total * 100, 2), on = "group"]
 
   top_sub <- cases_controls_n[pct >= 1 & group == "case"][order(-pct)][1:n_top, substance]
@@ -294,7 +294,8 @@ calculate_prevalence_cca <- function(data1, data2, selected_values,
 	# Step 3: Calculate frequencies for these filtered patients
 	# This creates the freq_data that create_prevalence_ratio_table expects
 	freq <- data1_filtered[, .N, by = c("group", group_col)]
-	group_totals <- data1_filtered[, .(total = uniqueN(patid)), by = group]
+	# group_totals <- data1_filtered[, .(total = uniqueN(patid)), by = group]
+	group_totals <- data1_filtered[, .(total = .N), by = group]
 	freq[group_totals, pct := round(N / total * 100, 2), on = "group"]
 
 	# Step 4: Reuse create_prevalence_ratio_table to get ORs and statistics

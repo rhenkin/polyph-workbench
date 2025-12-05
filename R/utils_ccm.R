@@ -48,7 +48,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 
 	# Cases: use the filtered outcome_prescriptions
 	cases_presc <- unique(cases[, .(patid, index_date, eventdate = outcome_date, index_age_days = index_age * 365.25, strata)])
-	cases_presc <- cases_presc[gold_cp, on = "patid", nomatch = 0][start_date <= index_date & stop_date >= index_date - 84]
+	cases_presc <- cases_presc[gold_cp, on = "patid",nomatch = 0][start_date <= index_date & stop_date >= index_date - 84]
 	cases_presc[, treatment := 1]
 
 	# Controls: get prescriptions active at their index date
@@ -172,7 +172,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 		control_date_range = range(controls$control_index_date),
 		created_date = Sys.Date(),
 		matching_method = "stratified_sampling",
-		strata_variable = "sex_age_bin_n_ltc_year"
+		strata_variable = "stratum_first_presc_bin"
 	)
 
 	# ========================================================================

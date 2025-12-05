@@ -87,7 +87,8 @@ calculate_group_pairwise_ors <- function(presc_data,
 	n_patients <- uniqueN(presc_data$patid)
 
 	# Filter by prevalence
-	drug_counts <- presc_data[, .(n = uniqueN(patid)), by = substance]
+	# drug_counts <- presc_data[, .(n = uniqueN(patid)), by = substance]
+	drug_counts <- presc_data[, .(n = .N), by = substance]
 	drug_counts[, prevalence := n / n_patients]
 	common_drugs <- drug_counts[prevalence >= min_prevalence, substance]
 

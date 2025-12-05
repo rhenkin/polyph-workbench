@@ -215,7 +215,7 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 						tags$br(),
 						sprintf("Cases: %d, Controls: %d",
 										study_data$metadata$n_cases,
-										study_data$metadata$n_controls_unique)
+										study_data$metadata$n_controls_total)
 					)
 				} else {
 					tags$div(
