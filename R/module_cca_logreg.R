@@ -1,13 +1,11 @@
-# R/module_cca_clogit.R
-
-module_cca_clogit_ui <- function(id) {
+module_cca_logreg_ui <- function(id) {
 	ns <- NS(id)
 
 	accordion(
 		open = FALSE,
 		accordion_panel(
-			title = "Conditional Logistic Regression",
-			value = "clogit_panel",
+			title = "Logistic Regression",
+			value = "logreg_panel",
 
 			card_body(
 				p("Model the association between medications and case status, adjusting for selected long-term conditions and matching strata."),
@@ -55,7 +53,8 @@ module_cca_clogit_ui <- function(id) {
 
 				hr(),
 
-				h4("Step 2: Select medications to model"),
+				navset_tab(
+					nav_panel("Background medications model",
 
 				numericInput(
 					ns("med_min_case_prev"),
@@ -108,7 +107,7 @@ module_cca_clogit_ui <- function(id) {
 					)
 				),
 
-				actionButton(ns("run_clogit"), "Run Models", class = "btn-primary"),
+				actionButton(ns("run_logreg"), "Run Models", class = "btn-primary"),
 
 				hr(),
 
@@ -126,14 +125,16 @@ module_cca_clogit_ui <- function(id) {
 					),
 					downloadButton(ns("download_results"), "Download Results", class = "btn-sm btn-secondary"),
 					br(), br(),
-					reactableOutput(ns("clogit_results_table"))
+					reactableOutput(ns("logreg_results_table"))
 				)
+			)
+			)
 			)
 		)
 	)
 }
 
-module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r) {
+module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r, cases_controls_r) {
 	moduleServer(id, function(input, output, session) {
 		ns <- session$ns
 
@@ -184,7 +185,7 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 
 		# Reactive values
 		filtered_ltcs_r <- reactiveVal(NULL)
-		clogit_results_r <- reactiveVal(NULL)
+		logreg_results_r <- reactiveVal(NULL)
 
 		# Filter LTCs based on thresholds
 		observeEvent(input$filter_ltcs, {
@@ -266,7 +267,7 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 		})
 
 		# Run conditional logistic regression
-		observeEvent(input$run_clogit, {
+		observeEvent(input$run_logreg, {
 			req(filtered_ltcs_r(), patient_data_r(), prescriptions_r(), ltcs_r())
 
 			patient_data_filtered <- patient_data_r()
@@ -332,7 +333,7 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 					sprintf("Running interaction models for %d medication pairs...", length(med_pairs)),
 					type = "message",
 					duration = NULL,
-					id = "clogit_notification"
+					id = "logreg_notification"
 				)
 
 				tryCatch({
@@ -344,12 +345,12 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 						ltcs = ltcs_filtered
 					)
 
-					clogit_results_r(results)
+					logreg_results_r(results)
 
 					output$results_available <- reactive({ TRUE })
 					outputOptions(session$output, "results_available", suspendWhenHidden = FALSE)
 
-					removeNotification("clogit_notification")
+					removeNotification("logreg_notification")
 					showNotification(
 						sprintf("Interaction models fitted for %d medication pairs", length(med_pairs)),
 						type = "message",
@@ -357,7 +358,7 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 					)
 
 				}, error = function(e) {
-					removeNotification("clogit_notification")
+					removeNotification("logreg_notification")
 					showNotification(
 						paste("Error running interaction models:", e$message),
 						type = "error",
@@ -367,7 +368,7 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			} else {
 				# Original single medication models
 				showNotification("Running logistic regression models...",
-												 type = "message", duration = NULL, id = "clogit_notification")
+												 type = "message", duration = NULL, id = "logreg_notification")
 
 				tryCatch({
 					results <- run_conditional_logistic_models(
@@ -378,12 +379,12 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 						ltcs = ltcs_filtered
 					)
 
-					clogit_results_r(results)
+					logreg_results_r(results)
 
 					output$results_available <- reactive({ TRUE })
 					outputOptions(session$output, "results_available", suspendWhenHidden = FALSE)
 
-					removeNotification("clogit_notification")
+					removeNotification("logreg_notification")
 					showNotification(
 						sprintf("Models fitted for %d medications", length(medications_to_model)),
 						type = "message",
@@ -391,7 +392,7 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 					)
 
 				}, error = function(e) {
-					removeNotification("clogit_notification")
+					removeNotification("logreg_notification")
 					showNotification(
 						paste("Error running models:", e$message),
 						type = "error",
@@ -402,10 +403,10 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 		})
 
 		# Display results table
-		output$clogit_results_table <- renderReactable({
-			req(clogit_results_r())
+		output$logreg_results_table <- renderReactable({
+			req(logreg_results_r())
 
-			results <- copy(clogit_results_r())
+			results <- copy(logreg_results_r())
 
 			# Calculate total cases and controls for percentages
 			total_cases <- patient_data_r()[treatment == 1, .N]
@@ -474,14 +475,15 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 		output$download_results <- downloadHandler(
 			filename = function() {
 				if (input$include_interactions) {
-					paste0("clogit_interaction_results_", Sys.Date(), ".csv")
+					paste0("logreg_interaction_results_", Sys.Date(), ".csv")
 				} else {
-					paste0("clogit_results_", Sys.Date(), ".csv")
+					paste0("logreg_results_", Sys.Date(), ".csv")
 				}
 			},
 			content = function(file) {
-				fwrite(clogit_results_r(), file)
+				fwrite(logreg_results_r(), file)
 			}
 		)
+
 	})
 }

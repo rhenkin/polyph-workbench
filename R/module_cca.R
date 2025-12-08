@@ -165,9 +165,9 @@ module_cca_ui <- function(id) {
 										),
 
 										card(
-											card_header("Conditional Logistic Regression"),
+											card_header("Logistic Regression"),
 											card_body(
-												module_cca_clogit_ui(ns("clogit"))
+												module_cca_logreg_ui(ns("logreg"))
 											)
 										)
 										),
@@ -521,11 +521,12 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 		)
 
 
-		module_cca_clogit_server(
-			id = "clogit",
+		module_cca_logreg_server(
+			id = "logreg",
 			patient_data_r = patient_data_r,
 			prescriptions_r = prescriptions_aggregated_r,
-			ltcs_r = ltcs_r
+			ltcs_r = ltcs_r,
+			cases_controls_r = cases_controls_r
 		)
 
 	})

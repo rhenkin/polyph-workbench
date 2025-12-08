@@ -1,4 +1,4 @@
-# R/utils_cca_clogit.R
+# R/utils_cca_logreg.R
 
 #' Run logistic regression models for multiple medications
 #'
@@ -8,7 +8,7 @@
 #' @param prescriptions data.table with patid, substance, group
 #' @param ltcs data.table with patid, term, group
 #' @return data.table with model results
-run_conditional_logistic_models <- function(medications, selected_ltcs,
+run_logistic_models <- function(medications, selected_ltcs,
 																						patient_data, prescriptions, ltcs) {
 
 	# Strip asterisks from names (added by significance testing)
@@ -16,7 +16,7 @@ run_conditional_logistic_models <- function(medications, selected_ltcs,
 	selected_ltcs <- gsub("\\*$", "", selected_ltcs)
 
 	# Prepare the base dataset
-	model_data <- prepare_clogit_data(
+	model_data <- prepare_logreg_data(
 		patient_data = patient_data,
 		prescriptions = prescriptions,
 		ltcs = ltcs,
@@ -26,7 +26,7 @@ run_conditional_logistic_models <- function(medications, selected_ltcs,
 
 	# Fit models for each medication
 	results_list <- lapply(medications, function(med) {
-		fit_single_clogit_model(
+		fit_single_logreg_model(
 			model_data = model_data,
 			medication = med,
 			selected_ltcs = selected_ltcs
@@ -58,7 +58,7 @@ run_interaction_models <- function(med_pairs, selected_ltcs,
 	all_meds <- gsub("\\*$", "", all_meds)
 
 	# Prepare the base dataset with all medications
-	model_data <- prepare_clogit_data(
+	model_data <- prepare_logreg_data(
 		patient_data = patient_data,
 		prescriptions = prescriptions,
 		ltcs = ltcs,
@@ -288,7 +288,7 @@ fit_interaction_model <- function(model_data, med1, med2, selected_ltcs) {
 #' @param medications character vector of medications to include
 #' @param selected_ltcs character vector of LTCs to include
 #' @return data.table in wide format ready for modeling
-prepare_clogit_data <- function(patient_data, prescriptions, ltcs,
+prepare_logreg_data <- function(patient_data, prescriptions, ltcs,
 																medications, selected_ltcs) {
 
 	# Start with patient data
@@ -298,7 +298,7 @@ prepare_clogit_data <- function(patient_data, prescriptions, ltcs,
 	med_indicators <- create_medication_indicators(prescriptions, medications)
 
 	# Create binary indicators for LTCs
-	ltc_indicators <- create_ltc_indicators_clogit(ltcs, selected_ltcs)
+	ltc_indicators <- create_ltc_indicators_logreg(ltcs, selected_ltcs)
 
 	# Merge everything
 	model_data <- merge(base_data, med_indicators, by = "patid", all.x = TRUE)
@@ -365,7 +365,7 @@ create_medication_indicators <- function(prescriptions, medications) {
 #' @param ltcs data.table with patid and term
 #' @param selected_ltcs character vector of LTC terms
 #' @return data.table with patid and binary indicators
-create_ltc_indicators_clogit <- function(ltcs, selected_ltcs) {
+create_ltc_indicators_logreg <- function(ltcs, selected_ltcs) {
 
 	# Filter to selected LTCs
 	ltcs_subset <- ltcs[term %in% selected_ltcs, .(patid, term)]
@@ -404,7 +404,7 @@ create_ltc_indicators_clogit <- function(ltcs, selected_ltcs) {
 #' @param medication character string of medication name
 #' @param selected_ltcs character vector of LTC terms
 #' @return data.table with model results (single row)
-fit_single_clogit_model <- function(model_data, medication, selected_ltcs) {
+fit_single_logreg_model <- function(model_data, medication, selected_ltcs) {
 
 	# Get column names
 	med_col <- paste0("med_", make.names(medication))
