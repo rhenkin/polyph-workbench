@@ -170,12 +170,6 @@ module_cca_ui <- function(id) {
 												module_cca_clogit_ui(ns("clogit"))
 											)
 										)
-										# card(
-										# 	card_header("Sensitivity Analysis"),
-										# 	card_body(
-										# 		module_cca_sensitivity_ui(ns("sensitivity"))
-										# 	)
-										# )
 										),
 					full_screen  = TRUE
 				)
@@ -533,11 +527,6 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 			prescriptions_r = prescriptions_aggregated_r,
 			ltcs_r = ltcs_r
 		)
-		# module_cca_sensitivity_server(
-		# 	"sensitivity",
-		# 	patient_data_r,
-		# 	prescriptions_aggregated_r,
-		# 	ltcs_r
-		# )
+
 	})
 }

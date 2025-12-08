@@ -75,6 +75,21 @@ module_cca_clogit_ui <- function(id) {
 					dropboxWrapper = "body"
 				),
 
+				virtualSelectInput(
+					ns("subgroup_filter"),
+					"Filter analysis to specific subgroup (optional):",
+					choices = list(
+						"All patients" = list("all" = "All patients"),
+						"Sex" = list(),
+						"Ethnicity" = list(),
+						"PP burden" = list(),
+						"MLTC burden" = list()
+					),
+					selected = "all",
+					search = TRUE,
+					dropboxWrapper = "body"
+				),
+
 				checkboxInput(
 					ns("include_interactions"),
 					"Model medication interactions (pairwise)",
@@ -133,6 +148,38 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			req(prescriptions_r(), patient_data_r())
 			freq <- calculate_frequency_stats(prescriptions_r(), "substance")
 			create_prevalence_ratio_table(freq, "substance", data_with_group = prescriptions_r())
+		})
+
+
+		observe({
+			req(patient_data_r())
+
+			patient_data <- patient_data_r()
+
+			subgroup_choices <- list(
+				"All patients" = list("all" = "All patients"),
+				"Sex" = setNames(
+					paste0("sex#", unique(patient_data$sex)),
+					paste0("Sex: ", unique(patient_data$sex))
+				),
+				"Ethnicity" = setNames(
+					paste0("eth_group#", unique(patient_data$eth_group)),
+					paste0("Ethnicity: ", unique(patient_data$eth_group))
+				),
+				"PP burden" = setNames(
+					paste0("pp_group#", unique(patient_data$pp_group)),
+					paste0("PP: ", unique(patient_data$pp_group))
+				),
+				"MLTC burden" = setNames(
+					paste0("mltc_group#", unique(patient_data$mltc_group)),
+					paste0("MLTC: ", unique(patient_data$mltc_group))
+				)
+			)
+
+			updateVirtualSelect(
+				"subgroup_filter",
+				choices = subgroup_choices
+			)
 		})
 
 		# Reactive values
@@ -222,6 +269,32 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 		observeEvent(input$run_clogit, {
 			req(filtered_ltcs_r(), patient_data_r(), prescriptions_r(), ltcs_r())
 
+			patient_data_filtered <- patient_data_r()
+			prescriptions_filtered <- prescriptions_r()
+			ltcs_filtered <- ltcs_r()
+
+			if (!is.null(input$subgroup_filter) && input$subgroup_filter != "all") {
+				# Parse the subgroup selection (format: "variable#value")
+				subgroup_parts <- strsplit(input$subgroup_filter, "#")[[1]]
+				subgroup_var <- subgroup_parts[1]
+				subgroup_val <- subgroup_parts[2]
+
+				# Filter patient data
+				patient_data_filtered <- patient_data_filtered[get(subgroup_var) == subgroup_val]
+
+				# Filter prescriptions and LTCs to matching patients
+				filtered_patids <- patient_data_filtered$patid
+				prescriptions_filtered <- prescriptions_filtered[patid %in% filtered_patids]
+				ltcs_filtered <- ltcs_filtered[patid %in% filtered_patids]
+
+				showNotification(
+					sprintf("Filtered to subgroup: %s = %s (%d patients)",
+									subgroup_var, subgroup_val, length(filtered_patids)),
+					type = "message",
+					duration = 3
+				)
+			}
+
 			# Determine which medications to model
 			if (is.null(input$selected_meds) || length(input$selected_meds) == 0) {
 				# Use all eligible medications
@@ -248,6 +321,8 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 				return()
 			}
 
+			selected_ltc_terms <- filtered_ltcs_r()$term
+
 			# Check if running interaction models
 			if (input$include_interactions) {
 				# Generate all pairs
@@ -263,10 +338,10 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 				tryCatch({
 					results <- run_interaction_models(
 						med_pairs = med_pairs,
-						selected_ltcs = filtered_ltcs_r()$term,
-						patient_data = patient_data_r(),
-						prescriptions = prescriptions_r(),
-						ltcs = ltcs_r()
+						selected_ltcs = selected_ltc_terms,
+						patient_data = patient_data_filtered,
+						prescriptions = prescriptions_filtered,
+						ltcs = ltcs_filtered
 					)
 
 					clogit_results_r(results)
@@ -297,10 +372,10 @@ module_cca_clogit_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 				tryCatch({
 					results <- run_conditional_logistic_models(
 						medications = medications_to_model,
-						selected_ltcs = filtered_ltcs_r()$term,
-						patient_data = patient_data_r(),
-						prescriptions = prescriptions_r(),
-						ltcs = ltcs_r()
+						selected_ltcs = selected_ltc_terms,
+						patient_data = patient_data_filtered,
+						prescriptions = prescriptions_filtered,
+						ltcs = ltcs_filtered
 					)
 
 					clogit_results_r(results)
