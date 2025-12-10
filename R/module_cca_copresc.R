@@ -16,6 +16,7 @@ module_cca_copresc_ui <- function(id) {
 		accordion_panel(
 			title = "Results",
 			value = "copresc_results_panel",
+			icon = bs_icon("graph-up"),
 			layout_columns(
 				col_widths = c(1,1,1),
 				numericInput(

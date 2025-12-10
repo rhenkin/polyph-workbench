@@ -24,6 +24,7 @@ module_ltc_explorer_ui <- function(id) {
             # First accordion panel: LTC prevalence tables
             accordion_panel(
                 title = "Prevalence table",
+                icon = bs_icon("table"),
                 navset_tab(
                     # Tab 1: Overall cases prevalence
                     nav_panel("Prevalence", dataTableOutput(ns("ltc_freq_table"))),
@@ -38,6 +39,7 @@ module_ltc_explorer_ui <- function(id) {
             # Second accordion panel: LTC prevalence by drug
             accordion_panel(
                 "LTC prevalence per drug",
+                icon = bs_icon("prescription2"),
                 card(
                     full_screen = TRUE,
                     height = "60em",

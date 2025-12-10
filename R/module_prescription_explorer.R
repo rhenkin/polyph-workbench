@@ -10,6 +10,7 @@ module_prescription_explorer_ui <- function(id) {
         accordion_panel(
           title = "Prevalence table",
           value = "prev_tables",
+          icon = bs_icon("table"),
           navset_tab(
             nav_panel("Prevalence",
             						dataTableOutput(ns("subst_freq_table"))
@@ -24,6 +25,7 @@ module_prescription_explorer_ui <- function(id) {
         accordion_panel(
         	title ="Prescription prevalence per LTC",
         	value = "ltc_prev",
+        	icon = bs_icon("clipboard2-pulse"),
         		card(full_screen = TRUE,
         				 height = "60em",
         			fluidRow(column(6, uiOutput(ns("ltc_dropdown_ui"))),
@@ -34,6 +36,7 @@ module_prescription_explorer_ui <- function(id) {
         accordion_panel(
         	title = "OR heatmap",
         	value = "or_heatmap_acc",
+        	icon = bs_icon("grid-3x3"),
         	card(
         		full_screen = TRUE,
         		virtualSelectInput(ns("corr_heatmap_strat"), label = "Select group to filter:", choices = NULL,  autoSelectFirstOption = FALSE, search = FALSE, disableOptionGroupCheckbox = TRUE, multiple = FALSE),
@@ -42,14 +45,19 @@ module_prescription_explorer_ui <- function(id) {
         ),
         accordion_panel(
         	"Polypharmacy transition per substance",
+        	icon = bs_icon("shuffle"),
         	div("Column indicates current number of prescriptions before new prescription is added"),
         	dataTableOutput(ns("transition_table"))
         ),
         accordion_panel(
-          "Time to outcome", module_presc_tto_ui(ns("tto_module"))
+          "Time to outcome",
+          icon = bs_icon("hourglass-split"),
+          module_presc_tto_ui(ns("tto_module"))
         ),
         accordion_panel(
-        	"Acute prescriptions", module_acute_presc_ui(ns("acute_presc_module"))
+        	"Acute prescriptions",
+        	icon = bs_icon("capsule-pill"),
+        	module_acute_presc_ui(ns("acute_presc_module"))
         )
     )
   )

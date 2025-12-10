@@ -6,6 +6,7 @@ module_cca_prevalence_ui <- function(id) {
 		accordion_panel(
 			title = "Long-term conditions",
 			value = "ltc_prev_tables",
+			icon = bs_icon("heart-pulse"),
 			navset_tab(
 				nav_panel(
 					"Prevalence table",
@@ -39,6 +40,7 @@ module_cca_prevalence_ui <- function(id) {
 		accordion_panel(
 			title = "Prescriptions",
 			value = "presc_prev_tables",
+			icon = bs_icon("capsule"),
 			navset_tab(
 				nav_panel(
 					"Prevalence table",
@@ -73,6 +75,7 @@ module_cca_prevalence_ui <- function(id) {
 		accordion_panel(
 			title = "Recent prescriptions",
 			value = "recent_presc_prev_tables",
+			icon = bs_icon("capsule-pill"),
 			navset_tab(
 				nav_panel(
 					"Prevalence table",

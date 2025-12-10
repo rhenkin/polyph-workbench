@@ -5,6 +5,7 @@ module_cca_sociodemographics_ui <- function(id) {
 		accordion_panel(
 			title = "Table",
 			value = "demog_tables",
+			icon = bs_icon("people-fill"),
 			div("Using number of unique patients. A patient can contribute with 1 or more observations."),
 			gt::gt_output(ns("sociodemog_table"))
 		)

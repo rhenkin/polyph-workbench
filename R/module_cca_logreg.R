@@ -6,7 +6,7 @@ module_cca_logreg_ui <- function(id) {
 		accordion_panel(
 			title = "Logistic Regression",
 			value = "logreg_panel",
-
+			icon = bs_icon("calculator"),
 			card_body(
 				p("Model the association between medications and case status, adjusting for selected long-term conditions and matching strata."),
 

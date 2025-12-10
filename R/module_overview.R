@@ -10,28 +10,30 @@ module_overview_ui <- function(id) {
 			accordion_panel(
 				title = "Demographic distribution",
 				value = "demodists",
+				icon = bs_icon("people-fill"),
 				navset_tab(
 					nav_panel("Table", gt_output(ns("demodist_table"))),
 					nav_panel("Distribution across polypharmacy levels", gt_output(ns("pp_demodist_table")))
 				)
 			),
-			accordion_panel(
-				title = "Overview of polypharmacy distribution for selected outcome",
-				value = "pphists",
-				# layout_columns(
-				#   col_widths = c(6, 6),
-				fluidRow(
-					# vegawidgetOutput(ns("pp_histogram")),
-					# vegawidgetOutput(ns("tto_histogram")),
-					# vegawidgetOutput(ns("pp_sex_dist")),
-					# vegawidgetOutput(ns("pp_age_group_dist")),
-					# vegawidgetOutput(ns("pp_eth_dist")),
-					# vegawidgetOutput(ns("pp_imd_dist"))
-				)
-			),
+			# accordion_panel(
+			# 	title = "Overview of polypharmacy distribution for selected outcome",
+			# 	value = "pphists",
+			# 	# layout_columns(
+			# 	#   col_widths = c(6, 6),
+			# 	fluidRow(
+			# 		# vegawidgetOutput(ns("pp_histogram")),
+			# 		# vegawidgetOutput(ns("tto_histogram")),
+			# 		# vegawidgetOutput(ns("pp_sex_dist")),
+			# 		# vegawidgetOutput(ns("pp_age_group_dist")),
+			# 		# vegawidgetOutput(ns("pp_eth_dist")),
+			# 		# vegawidgetOutput(ns("pp_imd_dist"))
+			# 	)
+			# ),
 			accordion_panel(
 				title = "Paired distributions of PP",
 				value = "pairedpp",
+				icon = bs_icon("bar-chart-fill"),
 				fluidRow(
 					column(width = 2, selectizeInput(ns("paired_x_variable"), "X variable", choices = paired_choices)),
 					column(width = 1,
@@ -46,6 +48,7 @@ module_overview_ui <- function(id) {
 			accordion_panel(
 				title = "Time-to-outcome versus PP burden from last prescription",
 				value = "pptime",
+				icon = bs_icon("hourglass-split"),
 				vegawidgetOutput(ns("tto_curve"))
 			)
 		)
