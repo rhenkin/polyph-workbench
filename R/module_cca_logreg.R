@@ -15,8 +15,8 @@ module_cca_logreg_ui <- function(id) {
 				layout_columns(
 					col_widths = c(4, 4, 4),
 					numericInput(
-						ns("ltc_min_case_prev"),
-						"Minimum LTC case prevalence (%):",
+						ns("ltc_min_prev"),
+						"Minimum LTC prevalence (%):",
 						value = 5,
 						min = 1,
 						max = 50,
@@ -57,8 +57,8 @@ module_cca_logreg_ui <- function(id) {
 					nav_panel("Background medications model",
 
 				numericInput(
-					ns("med_min_case_prev"),
-					"Minimum medication case prevalence (%):",
+					ns("med_min_prev"),
+					"Minimum medication prevalence (%):",
 					value = 2,
 					min = 0.5,
 					max = 20,
@@ -134,7 +134,7 @@ module_cca_logreg_ui <- function(id) {
 
 								numericInput(
 									ns("pp_interaction_min_prev"),
-									"Minimum medication case prevalence (%):",
+									"Minimum medication prevalence (%):",
 									value = 2,
 									min = 0.5,
 									max = 20,
@@ -239,7 +239,8 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 
 			# Filter by case prevalence and OR
 			filtered <- ltc_data[
-				case >= input$ltc_min_case_prev &
+				case >= input$ltc_min_prev &
+					control >= input$ltc_min_prev &
 					OR >= input$ltc_min_or &
 					!is.na(OR)
 			]
@@ -292,7 +293,8 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			med_data <- med_freq_data()
 
 			# Filter by minimum case prevalence
-			eligible_meds <- med_data[case >= input$med_min_case_prev, substance]
+			eligible_meds <- med_data[case >= input$med_min_prev &
+																	control >= input$med_min_prev, substance]
 
 			updateVirtualSelect(
 				"selected_meds",
@@ -344,7 +346,8 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 				# Use all eligible medications
 				req(med_freq_data())
 				med_data <- med_freq_data()
-				medications_to_model <- med_data[case >= input$med_min_case_prev, substance]
+				medications_to_model <- med_data[case >= input$med_min_prev &
+																				 	control >= input$med_min_prev, substance]
 
 				showNotification(
 					sprintf("No medications selected - running models for all %d eligible medications",
@@ -582,7 +585,8 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			req(recent_presc_freq_data())
 
 			med_data <- recent_presc_freq_data()
-			eligible_meds <- med_data[case >= input$pp_interaction_min_prev, substance]
+			eligible_meds <- med_data[case >= input$pp_interaction_min_prev &
+																	control >= input$pp_interaction_min_prev, substance]
 
 			updateVirtualSelect(
 				"pp_interaction_meds",
@@ -598,7 +602,8 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			if (is.null(input$pp_interaction_meds) || length(input$pp_interaction_meds) == 0) {
 				req(recent_presc_freq_data())
 				med_data <- recent_presc_freq_data()
-				medications_to_model <- med_data[case >= input$pp_interaction_min_prev, substance]
+				medications_to_model <- med_data[case >= input$pp_interaction_min_prev &
+																				 	control >= input$pp_interaction_min_prev, substance]
 
 				showNotification(
 					sprintf("No medications selected - running models for all %d eligible medications",
