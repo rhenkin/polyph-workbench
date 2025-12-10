@@ -14,10 +14,34 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 																					 pred_window = 30,
 																					 match_ratio = 4,
 																					 progress,
-																					 patient_filters = NULL) {
+																					 patient_filters = NULL,
+																					 prescription_filter = list(enabled = FALSE)) {
 
 	# Step 1: Build cases table
 	progress$set(message = "Filtering prescription risk table", value = 0.2, detail = "Building cases table")
+
+	# Step 0: APPLY PRESCRIPTION FILTER (if enabled)
+	if (prescription_filter$enabled) {
+		allowed_substances <- prescription_filter$substances
+
+		# Count before filtering (Arrow query)
+		n_before <- master_risk_pool_dataset %>% nrow()
+
+		# Apply filter using dplyr (stays as Arrow dataset, lazy evaluation)
+		master_risk_pool_dataset <- master_risk_pool_dataset %>%
+			dplyr::filter(substance %in% allowed_substances)
+
+		# Count after filtering
+		n_after <- master_risk_pool_dataset %>% nrow()
+
+		message(sprintf("Prescription filter applied: %d rows before, %d rows after (%d substances)",
+										n_before, n_after, length(allowed_substances)))
+
+		if (n_after == 0) {
+			stop("No prescriptions remain after applying filter. Please adjust your medication selection.")
+		}
+	}
+
 	cases <- build_cases_table(
 		outcome_prescriptions = outcome_prescriptions,
 		master_risk_pool = master_risk_pool_dataset,

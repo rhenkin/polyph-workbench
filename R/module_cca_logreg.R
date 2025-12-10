@@ -127,6 +127,50 @@ module_cca_logreg_ui <- function(id) {
 					br(), br(),
 					reactableOutput(ns("logreg_results_table"))
 				)
+			),
+			nav_panel("Prescription × PP interaction model",
+
+								p("Model interactions between the most recent prescription and polypharmacy burden groups, adjusting for selected LTCs."),
+
+								numericInput(
+									ns("pp_interaction_min_prev"),
+									"Minimum medication case prevalence (%):",
+									value = 2,
+									min = 0.5,
+									max = 20,
+									step = 0.5
+								),
+
+								virtualSelectInput(
+									ns("pp_interaction_meds"),
+									"Select medications (leave empty for all):",
+									choices = NULL,
+									multiple = TRUE,
+									search = TRUE,
+									dropboxWrapper = "body"
+								),
+
+								actionButton(ns("run_pp_interaction"), "Run Model", class = "btn-primary"),
+
+								hr(),
+
+								conditionalPanel(
+									condition = "output.pp_interaction_results_available",
+									ns = ns,
+									h4("Results"),
+									div(
+										class = "alert alert-light",
+										style = "margin-bottom: 15px;",
+										tags$strong("Model:"), " Most recent prescription × PP group interaction, adjusting for selected LTCs",
+										tags$br(),
+										tags$code("treatment ~ medication + pp_group + medication:pp_group + LTCs + stratum"),
+										tags$br(),
+										tags$small("PP groups: 0-2, 2-5, 5-10, 10+ concurrent medications")
+									),
+									downloadButton(ns("download_pp_interaction_results"), "Download Results", class = "btn-sm btn-secondary"),
+									br(), br(),
+									reactableOutput(ns("pp_interaction_results_table"))
+								)
 			)
 			)
 			)
@@ -158,7 +202,6 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			patient_data <- patient_data_r()
 
 			subgroup_choices <- list(
-				"All patients" = list("all" = "All patients"),
 				"Sex" = setNames(
 					paste0("sex#", unique(patient_data$sex)),
 					paste0("Sex: ", unique(patient_data$sex))
@@ -202,7 +245,7 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			]
 
 			# Order by OR descending and take top N
-			setorder(filtered, -OR)
+
 			filtered <- filtered[1:min(input$ltc_max_count, nrow(filtered))]
 
 			filtered_ltcs_r(filtered)
@@ -231,8 +274,8 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 				filtered_ltcs_r()[, .(term, case, control, OR, OR_CI_lower, OR_CI_upper)],
 				columns = list(
 					term = colDef(name = "LTC", minWidth = 200),
-					case = colDef(name = "Case %", format = colFormat(digits = 1)),
-					control = colDef(name = "Control %", format = colFormat(digits = 1)),
+					case = colDef(name = "Case %", format = colFormat(digits = 2)),
+					control = colDef(name = "Control %", format = colFormat(digits = 2)),
 					OR = colDef(name = "OR", format = colFormat(digits = 2)),
 					OR_CI_lower = colDef(name = "CI Lower", format = colFormat(digits = 2)),
 					OR_CI_upper = colDef(name = "CI Upper", format = colFormat(digits = 2))
@@ -274,7 +317,7 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			prescriptions_filtered <- prescriptions_r()
 			ltcs_filtered <- ltcs_r()
 
-			if (!is.null(input$subgroup_filter) && input$subgroup_filter != "all") {
+			if (isTruthy(input$subgroup_filter)) {
 				# Parse the subgroup selection (format: "variable#value")
 				subgroup_parts <- strsplit(input$subgroup_filter, "#")[[1]]
 				subgroup_var <- subgroup_parts[1]
@@ -371,7 +414,7 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 												 type = "message", duration = NULL, id = "logreg_notification")
 
 				tryCatch({
-					results <- run_conditional_logistic_models(
+					results <- run_logistic_models(
 						medications = medications_to_model,
 						selected_ltcs = selected_ltc_terms,
 						patient_data = patient_data_filtered,
@@ -415,28 +458,63 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			# Check if interaction results or single medication results
 			if ("med1" %in% names(results)) {
 				# Interaction results
+				# Update the reactable output in module_cca_logreg.R
+				# Replace the interaction results section with this:
+
+				# Create formatted OR columns
+				results[, med1_OR_formatted := sprintf("%.3f (%.3f - %.3f)", med1_OR, med1_CI_lower, med1_CI_upper)]
+				results[, med2_OR_formatted := sprintf("%.3f (%.3f - %.3f)", med2_OR, med2_CI_lower, med2_CI_upper)]
+				results[, interaction_OR_formatted := sprintf("%.3f (%.3f - %.3f)", interaction_OR, interaction_CI_lower, interaction_CI_upper)]
+				results[, combined_OR_formatted := sprintf("%.3f (%.3f - %.3f)", combined_OR, combined_CI_lower, combined_CI_upper)]
+
+				# Interaction results
 				reactable(
-					results[, .(med1, med2, interaction_OR, interaction_CI_lower, interaction_CI_upper,
-											interaction_p, pct_cases_both, pct_controls_both,
+					results[, .(med1, med2,
+											med1_OR_formatted, med1_p,
+											med2_OR_formatted, med2_p,
+											interaction_OR_formatted, interaction_p,
+											combined_OR_formatted,
+											pct_cases_both, pct_controls_both,
 											n_cases_both, n_controls_both, n_ltc_covariates, convergence)],
 					columns = list(
 						med1 = colDef(name = "Medication 1", minWidth = 150),
 						med2 = colDef(name = "Medication 2", minWidth = 150),
-						interaction_OR = colDef(name = "Interaction OR", format = colFormat(digits = 3)),
-						interaction_CI_lower = colDef(name = "CI Lower", format = colFormat(digits = 3)),
-						interaction_CI_upper = colDef(name = "CI Upper", format = colFormat(digits = 3)),
+
+						# Med1 main effect
+						med1_OR_formatted = colDef(name = "OR (95% CI)", minWidth = 140),
+						med1_p = colDef(name = "P-value", format = colFormat(digits = 4)),
+
+						# Med2 main effect
+						med2_OR_formatted = colDef(name = "OR (95% CI)", minWidth = 140),
+						med2_p = colDef(name = "P-value", format = colFormat(digits = 4)),
+
+						# Interaction
+						interaction_OR_formatted = colDef(name = "OR (95% CI)", minWidth = 140),
 						interaction_p = colDef(name = "P-value", format = colFormat(digits = 4)),
+
+						# Combined effect
+						combined_OR_formatted = colDef(name = "OR (95% CI)", minWidth = 140),
+
+						# Prevalence
 						pct_cases_both = colDef(name = "Cases % (both)", format = colFormat(digits = 2)),
 						pct_controls_both = colDef(name = "Controls % (both)", format = colFormat(digits = 2)),
+
+						# Hidden columns
 						n_cases_both = colDef(show = FALSE, name = "Cases n (both)", format = colFormat(digits = 0)),
 						n_controls_both = colDef(show = FALSE, name = "Controls n (both)", format = colFormat(digits = 0)),
 						n_ltc_covariates = colDef(show = FALSE, name = "# LTC Covariates", format = colFormat(digits = 0)),
 						convergence = colDef(show = FALSE, name = "Convergence")
 					),
+					columnGroups = list(
+						colGroup(name = "Med1 Main Effect (when Med2=0)", columns = c("med1_OR_formatted", "med1_p")),
+						colGroup(name = "Med2 Main Effect (when Med1=0)", columns = c("med2_OR_formatted", "med2_p")),
+						colGroup(name = "Interaction Effect", columns = c("interaction_OR_formatted", "interaction_p")),
+						colGroup(name = "Combined Effect (Med1 + Med2)", columns = c("combined_OR_formatted"))
+					),
 					defaultPageSize = 20,
 					searchable = TRUE,
-					filterable = TRUE,
-					defaultSorted = "interaction_p",
+					filterable = FALSE,
+					showPageSizeOptions = TRUE,
 					compact = TRUE
 				)
 			} else {
@@ -444,28 +522,23 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 				# Add prevalence columns
 				results[, case_prev := round(100 * n_cases / total_cases, 2)]
 				results[, control_prev := round(100 * n_controls / total_controls, 2)]
+				results[, OR_formatted := sprintf("%.3f (%.3f - %.3f)", OR, CI_lower, CI_upper)]
 
 				reactable(
-					results[, .(medication, OR, CI_lower, CI_upper, p_value,
-											case_prev, control_prev, n_cases, n_controls,
-											n_ltc_covariates, convergence)],
+					results[, .(medication,OR_formatted, p_value,
+											case_prev, control_prev)],
 					columns = list(
 						medication = colDef(name = "Medication", minWidth = 200),
-						OR = colDef(name = "OR", format = colFormat(digits = 3)),
-						CI_lower = colDef(name = "CI Lower", format = colFormat(digits = 3)),
-						CI_upper = colDef(name = "CI Upper", format = colFormat(digits = 3)),
+						OR_formatted = colDef(name = "OR (95% CI)", minWidth = 140),
 						p_value = colDef(name = "P-value", format = colFormat(digits = 4)),
 						case_prev = colDef(name = "Case %", format = colFormat(digits = 2)),
-						control_prev = colDef(name = "Control %", format = colFormat(digits = 2)),
-						n_cases = colDef(show = FALSE, name = "Cases (n)", format = colFormat(digits = 0)),
-						n_controls = colDef(show = FALSE, name = "Controls (n)", format = colFormat(digits = 0)),
-						n_ltc_covariates = colDef(show = FALSE, name = "# LTC Covariates", format = colFormat(digits = 0)),
-						convergence = colDef(show = FALSE, name = "Convergence")
+						control_prev = colDef(name = "Control %", format = colFormat(digits = 2))
 					),
 					defaultPageSize = 20,
 					searchable = TRUE,
-					filterable = TRUE,
-					defaultSorted = "p_value",
+					filterable = FALSE,
+					showPageSizeOptions = TRUE,
+					defaultSorted = "medication",
 					compact = TRUE
 				)
 			}
@@ -482,6 +555,202 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			},
 			content = function(file) {
 				fwrite(logreg_results_r(), file)
+			}
+		)
+
+		pp_interaction_results_r <- reactiveVal(NULL)
+
+		# Calculate frequency for recent prescriptions from cases_controls_r
+		recent_presc_freq_data <- reactive({
+			req(cases_controls_r(), patient_data_r())
+
+			# cases_controls_r only has: patid, index_date, substance, group
+			# We need to add strata from patient_data_r for the frequency calculations
+			recent_presc_with_strata <- merge(
+				cases_controls_r(),
+				patient_data_r()[, .(patid, strata)],
+				by = "patid",
+				all.x = TRUE
+			)
+
+			freq <- calculate_frequency_stats(recent_presc_with_strata, "substance")
+			create_prevalence_ratio_table(freq, "substance", data_with_group = recent_presc_with_strata)
+		})
+
+		# Observer to update medication choices for PP interaction model
+		observe({
+			req(recent_presc_freq_data())
+
+			med_data <- recent_presc_freq_data()
+			eligible_meds <- med_data[case >= input$pp_interaction_min_prev, substance]
+
+			updateVirtualSelect(
+				"pp_interaction_meds",
+				choices = sort(eligible_meds)
+			)
+		})
+
+		# Run PP interaction model
+		observeEvent(input$run_pp_interaction, {
+			req(filtered_ltcs_r(), patient_data_r(), cases_controls_r(), ltcs_r())
+
+			# Get selected medications
+			if (is.null(input$pp_interaction_meds) || length(input$pp_interaction_meds) == 0) {
+				req(recent_presc_freq_data())
+				med_data <- recent_presc_freq_data()
+				medications_to_model <- med_data[case >= input$pp_interaction_min_prev, substance]
+
+				showNotification(
+					sprintf("No medications selected - running models for all %d eligible medications",
+									length(medications_to_model)),
+					type = "message",
+					duration = 5
+				)
+			} else {
+				medications_to_model <- input$pp_interaction_meds
+			}
+
+			if (length(medications_to_model) == 0) {
+				showNotification(
+					"No medications meet the prevalence threshold",
+					type = "warning",
+					duration = 5
+				)
+				return()
+			}
+
+			selected_ltc_terms <- filtered_ltcs_r()$term
+
+			showNotification("Running PP interaction models...",
+											 type = "message", duration = NULL, id = "pp_interaction_notification")
+
+			tryCatch({
+				# Run interaction models using cases_controls_r and pp_group
+				results <- fit_pp_interaction_models(
+					selected_ltcs = selected_ltc_terms,
+					medications = medications_to_model,
+					patient_data = patient_data_r(),
+					recent_prescriptions = cases_controls_r(),
+					ltcs = ltcs_r()
+				)
+
+				pp_interaction_results_r(results)
+
+				output$pp_interaction_results_available <- reactive({ TRUE })
+				outputOptions(output, "pp_interaction_results_available", suspendWhenHidden = FALSE)
+
+				removeNotification("pp_interaction_notification")
+				showNotification(
+					sprintf("PP interaction models fitted for %d medications", length(medications_to_model)),
+					type = "message",
+					duration = 3
+				)
+
+			}, error = function(e) {
+				removeNotification("pp_interaction_notification")
+				showNotification(
+					paste("Error running PP interaction models:", e$message),
+					type = "error",
+					duration = 10
+				)
+			})
+		})
+
+		# Results table
+		output$pp_interaction_results_table <- renderReactable({
+			req(pp_interaction_results_r())
+
+			results <- copy(pp_interaction_results_r())
+
+			reactable(
+				results[, .(medication, pp_level,
+										combined_OR_formatted, combined_OR,
+										main_OR_formatted, main_p,
+										interaction_OR_formatted, interaction_p,
+										pct_cases, pct_controls)],
+				columns = list(
+					medication = colDef(name = "Medication", minWidth = 150),
+					pp_level = colDef(name = "PP Group", minWidth = 120),
+					combined_OR_formatted = colDef(
+						name = "Combined OR (95% CI)",
+						minWidth = 150,
+						style = function(value, index) {
+							# Get the actual OR value for conditional formatting
+							or_value <- results[index, combined_OR]
+							if (is.na(or_value)) return(NULL)
+							# Highlight strong effects
+							if (or_value > 1.5 || or_value < 0.67) {
+								list(background = "#fff3cd", fontWeight = "bold")
+							}
+						}
+					),
+					combined_OR = colDef(show = FALSE),  # Hidden column used for sorting/filtering
+					main_OR_formatted = colDef(name = "Main OR (95% CI)", minWidth = 150),
+					main_p = colDef(
+						name = "Main P",
+						format = colFormat(digits = 4),
+						style = function(value) {
+							if (is.na(value)) return(NULL)
+							if (value < 0.05) list(fontWeight = "bold")
+						}
+					),
+					interaction_OR_formatted = colDef(name = "Interaction OR (95% CI)", minWidth = 150),
+					interaction_p = colDef(
+						name = "Interaction P",
+						format = colFormat(digits = 4),
+						style = function(value) {
+							if (is.na(value)) return(NULL)
+							if (value < 0.05) list(fontWeight = "bold", color = "#d9534f")
+						}
+					),
+					pct_cases = colDef(name = "Cases %", format = colFormat(digits = 1)),
+					pct_controls = colDef(name = "Controls %", format = colFormat(digits = 1))
+				),
+				filterable = FALSE,
+				searchable = FALSE,
+				defaultPageSize = 20,
+				showPageSizeOptions = TRUE,
+				compact = TRUE,
+				defaultColDef = colDef(minWidth = 100),
+				defaultSorted = list(combined_OR = "desc")
+			)
+		})
+
+		# Download handler
+		output$download_pp_interaction_results <- downloadHandler(
+			filename = function() {
+				paste0("pp_interaction_results_", Sys.Date(), ".csv")
+			},
+			content = function(file) {
+				results <- pp_interaction_results_r()
+
+				# Select columns for export (include both formatted and raw values)
+				export_data <- results[, .(
+					medication,
+					pp_level,
+					combined_OR_formatted,
+					combined_OR,
+					combined_CI_lower,
+					combined_CI_upper,
+					main_OR_formatted,
+					main_OR,
+					main_CI_lower,
+					main_CI_upper,
+					main_p,
+					interaction_OR_formatted,
+					interaction_OR,
+					interaction_CI_lower,
+					interaction_CI_upper,
+					interaction_p,
+					pct_cases,
+					pct_controls,
+					n_cases,
+					n_controls,
+					n_ltc_covariates,
+					convergence
+				)]
+
+				fwrite(export_data, file)
 			}
 		)
 

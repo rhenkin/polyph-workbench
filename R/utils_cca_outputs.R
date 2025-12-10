@@ -247,7 +247,7 @@ create_prevalence_ratio_table <- function(freq_data, item_col, min_pct = 0.5,
 	table_data_wide[, p_adj := round(p_adj, 4)]
 
 	# Add asterisk to significant items (p_adj < 0.05)
-	table_data_wide[p_adj < 0.05, (item_col) := paste0(get(item_col), "*")]
+	# table_data_wide[p_adj < 0.05, (item_col) := paste0(get(item_col), "*")]
 
 	return(table_data_wide)
 }

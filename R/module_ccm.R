@@ -9,6 +9,45 @@ module_ccm_ui <- function(id) {
 										 numericInput(ns("match_ratio"), "Control:Case ratio:",
 										 						 value = 1, min = 1, max = 10, step = 1),
 										 div("Risk-set matching using sex, binned age at prescription, binned time since first prescription and calendar year"),
+										 card(
+										 	card_header("Step 3: Filter Most Recent Prescriptions (Optional)"),
+										 	card_body(
+										 		p("Filter which prescriptions qualify as the 'most recent prescription' for matching."),
+
+										 		checkboxInput(
+										 			ns("use_prescription_filter"),
+										 			"Filter to specific medication groups",
+										 			value = FALSE
+										 		),
+
+										 		conditionalPanel(
+										 			condition = "input.use_prescription_filter",
+										 			ns = ns,
+
+										 			virtualSelectInput(
+										 				ns("selected_bnf_groups"),
+										 				"Select BNF Sections or Paragraphs:",
+										 				choices = NULL,
+										 				multiple = TRUE,
+										 				search = TRUE,
+										 				optionsCount = 10,
+										 				dropboxWrapper = "body"
+										 			),
+
+										 			div(
+										 				class = "alert alert-info",
+										 				tags$strong("How to use:"),
+										 				tags$ul(
+										 					tags$li("Select entire sections (e.g., 'ALL: Analgesics') to include all medications in that group"),
+										 					tags$li("Or select specific paragraphs (e.g., 'Opioid Analgesics') for finer control"),
+										 					tags$li("You can mix sections and paragraphs")
+										 				)
+										 			),
+
+										 			textOutput(ns("filter_summary"))
+										 		)
+										 	)
+										 ),
 										 actionButton(ns("create_cohort"), "Create matched cohort", class = "btn-primary")
 							),
 							column(6,
@@ -62,6 +101,62 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 	moduleServer(id, function(input, output, session) {
 		ns <- session$ns
 
+		observe({
+			req(bnf_lookup)
+
+			# Create a simple data.table with paragraph and section
+			bnf_choices <- unique(bnf_lookup[
+				!is.na(BNF_Section) & BNF_Section != "" &
+					!is.na(BNF_Chapter) & BNF_Chapter != "",
+				.(chapter = BNF_Chapter, section = BNF_Section)
+			])
+
+			# Sort by section then paragraph
+			setorder(bnf_choices, chapter, section)
+
+			# Use split to create grouped choices
+			grouped_choices <- with(bnf_choices, split(section, chapter))
+
+			updateVirtualSelect(
+				"selected_bnf_groups",
+				choices = grouped_choices
+			)
+		})
+
+		prescription_filter_substances <- reactive({
+			if (!input$use_prescription_filter) {
+				return(NULL)
+			}
+
+			req(input$selected_bnf_groups)
+			req(bnf_lookup)
+
+			if (length(input$selected_bnf_groups) == 0) {
+				return(NULL)
+			}
+
+			# Selected values are just paragraph names now
+			selected_sections <- input$selected_bnf_groups
+
+			# Get substances from paragraphs
+			unique(bnf_lookup[BNF_Section %in% selected_sections, BNF_Chemical_Substance])
+		})
+
+	# Summary text
+	output$filter_summary <- renderText({
+	  if (!input$use_prescription_filter) return("")
+
+	  substances <- prescription_filter_substances()
+
+	  if (is.null(substances) || length(substances) == 0) {
+	    "⚠️ No medications selected - please select at least one section or paragraph"
+	  } else {
+	    sprintf("✓ Matching on %d unique substances from %d BNF groups",
+	            length(substances),
+	            length(input$selected_bnf_groups))
+	  }
+	})
+
 		# Load master risk pool once when module is activated
 		master_risk_pool_dataset <- reactive({
 			req(file.exists("../data/master_risk_pool_smaller.parquet"))
@@ -97,7 +192,16 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 					pred_window = input$pred_window,
 					match_ratio = input$match_ratio,
 					progress = progress,
-					patient_filters = patient_filter
+					patient_filters = patient_filter,
+					prescription_filter = if (input$use_prescription_filter) {
+						list(
+							enabled = TRUE,
+							substances = prescription_filter_substances(),
+							bnf_groups = input$selected_bnf_groups  # Save the actual selections
+						)
+					} else {
+						list(enabled = FALSE)
+					}
 				)
 
 				# Store results

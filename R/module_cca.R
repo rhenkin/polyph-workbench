@@ -400,16 +400,29 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 			create_burden_pyramid(patient_data_r(), "n_ltc", title = NULL, height = 250)
 		})
 
-		# Top substances plot - now uses aggregated prescriptions
-		output$top_recentpresc_bar_plot <- renderVegawidget({
+		cases_controls_aggregated_r <- reactive({
 			req(cases_controls_r(), input$cca_bnf_level)
 
-			# Aggregate cases_controls to selected BNF level
 			cc <- copy(cases_controls_r())
 			cc[, substance := bnf_lookup[match(substance, bnf_lookup$BNF_Chemical_Substance),
 																	 get(input$cca_bnf_level)]]
 			cc <- cc[!is.na(substance)]
 
+			# Remove duplicates after aggregation
+			unique(cc)
+		})
+
+		# Top substances plot - now uses aggregated prescriptions
+		output$top_recentpresc_bar_plot <- renderVegawidget({
+			req(cases_controls_aggregated_r())
+
+			# # Aggregate cases_controls to selected BNF level
+			# cc <- copy(cases_controls_r())
+			# cc[, substance := bnf_lookup[match(substance, bnf_lookup$BNF_Chemical_Substance),
+			# 														 get(input$cca_bnf_level)]]
+			# cc <- cc[!is.na(substance)]
+
+			cc <- cases_controls_aggregated_r()
 			full_screen <- isTruthy(input$recent_presc_card_full_screen)
 			create_top_substances_plot(cc, full_screen = full_screen)
 		})
@@ -526,7 +539,7 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 			patient_data_r = patient_data_r,
 			prescriptions_r = prescriptions_aggregated_r,
 			ltcs_r = ltcs_r,
-			cases_controls_r = cases_controls_r
+			cases_controls_r = cases_controls_aggregated_r
 		)
 
 	})

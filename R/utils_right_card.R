@@ -11,7 +11,7 @@ bnf_table_server <- function(id, bnf_lookup) {
 		observe({
 			unique_bnf_table <- unique(bnf_lookup[BNF_Chemical_Substance != "",.(BNF_Chapter, BNF_Section, BNF_Paragraph, BNF_Chemical_Substance)])
 			bnf_to_display(unique_bnf_table)
-		}, suspended = TRUE)
+		})
 
 
 		observeEvent(input$show_bnf_table, {
@@ -143,7 +143,7 @@ bnf_table_server <- function(id, bnf_lookup) {
 				easyClose = TRUE,
 				footer = NULL
 			))
-		}, suspended = TRUE)
+		})
 
 		# Select all sections button
 		observeEvent(input$select_all_sections, {
@@ -233,7 +233,7 @@ bnf_table_server <- function(id, bnf_lookup) {
 			} else {
 				updateSelectInput(session, "bnf_paragraph", choices = NULL, selected = NULL)
 			}
-		}, suspended = TRUE)
+		})
 
 		# Render substances display
 		output$substances_display <- renderUI({
