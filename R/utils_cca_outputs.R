@@ -431,3 +431,13 @@ calculate_prevalence_cca <- function(data1, data2, selected_values,
 #
 # 	result
 # }
+
+
+#' Add formatted OR column to prevalence table
+#'
+#' @param dt data.table with OR, OR_CI_lower, OR_CI_upper columns
+#' @return data.table with added OR_formatted column
+add_or_formatted_column <- function(dt) {
+	dt[, OR_formatted := sprintf("%.3f (%.3f - %.3f)", OR, OR_CI_lower, OR_CI_upper)]
+	dt
+}

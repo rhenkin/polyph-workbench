@@ -113,3 +113,22 @@ calculate_case_control_ratios <- function(freq_data, item_col, min_case_pct = 1)
 
   ratios[case_pct >= min_case_pct]
 }
+
+#' Apply patient stratification filter
+#'
+#' Filters data based on stratification variable in format "column#value"
+#'
+#' @param data data.table to filter
+#' @param strat_var Stratification variable string in format "column#value", or empty string
+#' @param patient_data data.table with patient information
+#' @return Filtered data.table
+apply_patient_stratification <- function(data, strat_var, patient_data) {
+	if (strat_var == "" || is.null(strat_var)) return(data)
+
+	parts <- strsplit(strat_var, "#")[[1]]
+	column_name <- parts[1]
+	filter_value <- parts[2]
+	selected_patids <- patient_data[get(column_name) == filter_value, patid]
+
+	data[patid %in% selected_patids]
+}

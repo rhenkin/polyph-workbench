@@ -71,11 +71,10 @@ module_cca_prevalence_ui <- function(id) {
 				)
 			)
 		),
-		# NEW PANEL: Recent prescriptions (from case_controls_r)
 		accordion_panel(
 			title = "Recent prescriptions",
 			value = "recent_presc_prev_tables",
-			icon = bs_icon("capsule-pill"),
+			icon = bs_icon("prescription2"),
 			navset_tab(
 				nav_panel(
 					"Prevalence table",
@@ -94,11 +93,11 @@ module_cca_prevalence_ui <- function(id) {
 					reactableOutput(ns("recent_presc_freq_table"), height = "50em")
 				),
 				nav_panel(
-					title = "Stratified prevalence",
+					title = "Prevalence by condition and background medication filter",
 					card(
 						full_screen = TRUE,
 						height = "60em",
-						div("Filter patients by both long-term conditions AND background medications simultaneously to see prevalence of recent prescriptions in this subset."),
+						div("Select conditions and background medications to show the prevalence difference only among patients with those characteristics."),
 						div("Table contains medications with a minimum of 1% prevalence in both cases and controls"),
 						fluidRow(
 							column(6,
@@ -132,263 +131,91 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 			}
 		})
 
+		# ============================================================================
+		# LTC PREVALENCE TABLES
+		# ============================================================================
+
 		# LTC frequency with optional stratification
 		ltc_freq_df <- reactive({
 			req(ltcs_r())
-			ltcs <- ltcs_r()
-			patient_data <- patient_data_r()
-			strat_var <- input$ltc_freq_strat_variable
-
-			if (strat_var != "") {
-				parts <- strsplit(strat_var, "#")[[1]]
-				column_name <- parts[1]
-				filter_value <- parts[2]
-				selected_patids <- patient_data[get(column_name) == filter_value, patid]
-				ltcs <- ltcs[patid %in% selected_patids]
-			}
-
-			calculate_frequency_stats(ltcs, "term")
+			ltcs_filtered <- apply_patient_stratification(
+				ltcs_r(),
+				input$ltc_freq_strat_variable,
+				patient_data_r()
+			)
+			calculate_frequency_stats(ltcs_filtered, "term")
 		})
-
 
 		# Render LTC frequency table
 		output$ltc_freq_table <- renderReactable({
-			# Get the underlying data with group information for OR calculation
-			ltcs <- ltcs_r()
-			patient_data <- patient_data_r()
-			strat_var <- input$ltc_freq_strat_variable
+			req(ltcs_r())
 
-			# Apply same stratification filter
-			if (strat_var != "") {
-				parts <- strsplit(strat_var, "#")[[1]]
-				column_name <- parts[1]
-				filter_value <- parts[2]
-				selected_patids <- patient_data[get(column_name) == filter_value, patid]
-				ltcs <- ltcs[patid %in% selected_patids]
-			}
+			# Apply stratification and calculate with ORs
+			ltcs_filtered <- apply_patient_stratification(
+				ltcs_r(),
+				input$ltc_freq_strat_variable,
+				patient_data_r()
+			)
 
-			# Calculate with ORs
-			table_data <- create_prevalence_ratio_table(
+			result_table <- create_prevalence_ratio_table(
 				ltc_freq_df(),
 				"term",
-				data_with_group = ltcs
+				data_with_group = ltcs_filtered
 			)
 
-			# Update column names to include OR columns
-			or_cols <- c("Condition", "Cases (%)", "Controls (%)",
-									 "OR", "OR_CI_lower", "OR_CI_upper")
+			# Add formatted OR column
+			result_table <- add_or_formatted_column(result_table)
 
-			table_data[, OR_formatted := sprintf("%.3f (%.3f - %.3f)", OR, OR_CI_lower, OR_CI_upper)]
+			# Rename columns with standard names
+			col_names <- get_prevalence_column_names("LTC")
+			colnames(result_table) <- c(col_names, "p_value", "p_adj", "OR_formatted")
 
-			if (all(c("OR", "p_value", "p_adj") %in% colnames(table_data))) {
-				colnames(table_data) <- c(or_cols, "p_value", "p_adj", "OR_formatted")
-
-				# Create reactable with expandable details for p-values
-				reactable(
-					table_data,
-					columns = list(
-						Condition = colDef(
-							name = "Condition",
-							cell = function(value, index) {
-								p_adj_val <- table_data[index, p_adj]
-								if (!is.na(p_adj_val) && p_adj_val < 0.05) {
-									paste0(value, "*")
-								} else {
-									value
-								}
-							}
-						),
-						OR_formatted = colDef(name = "OR (95% CI)", minWidth = 140),
-						`Cases (%)` = colDef(format = colFormat(digits = 2)),
-						`Controls (%)` = colDef(format = colFormat(digits = 2)),
-						OR = colDef(show = FALSE),
-						OR_CI_lower = colDef(show = FALSE),
-						OR_CI_upper = colDef(show = FALSE),
-						p_value = colDef(show = FALSE),
-						p_adj = colDef(show = FALSE)
-					),
-					details = function(index) {
-						p_val <- table_data[index, p_value]
-						p_adj_val <- table_data[index, p_adj]
-						if (is.na(p_val) & is.na(p_adj_val)) return(NULL)
-						htmltools::div(
-							style = "padding: 16px",
-							htmltools::tags$b("Statistical Testing:"),
-							htmltools::tags$div(
-								style = "margin-top: 8px",
-								sprintf("Raw p-value: %.4f", p_val)
-							),
-							htmltools::tags$div(
-								sprintf("Adjusted p-value: %.4f", p_adj_val)
-							),
-							htmltools::tags$div(
-								style = "margin-top: 8px; font-style: italic; color: #666;",
-								if (p_adj_val < 0.05) "Statistically significant (p < 0.05)" else "Not significant"
-							)
-						)
-					},
-					showPageInfo = FALSE,
-					compact = TRUE,
-					showPageSizeOptions = TRUE,
-					defaultPageSize = 15
-				)
-			} else {
-				colnames(table_data) <- c(or_cols)
-				reactable(table_data[order(-OR)], showPageInfo = FALSE, defaultPageSize = 15)
-			}
-		})
-
-		# Prescription frequency with optional stratification
-		presc_freq_df <- reactive({
-			req(prescriptions_r())
-			presc <- prescriptions_r()
-			patient_data <- patient_data_r()
-			strat_var <- input$presc_freq_strat_variable
-
-			if (strat_var != "") {
-				parts <- strsplit(strat_var, "#")[[1]]
-				column_name <- parts[1]
-				filter_value <- parts[2]
-				selected_patids <- patient_data[get(column_name) == filter_value, patid]
-				presc <- presc[patid %in% selected_patids]
-			}
-
-			calculate_frequency_stats(presc, "substance")
-		})
-
-		output$presc_freq_table <- renderReactable({
-			# Get the underlying data with group information for OR calculation
-			presc <- prescriptions_r()
-			patient_data <- patient_data_r()
-			strat_var <- input$presc_freq_strat_variable
-
-			# Apply same stratification filter
-			if (strat_var != "") {
-				parts <- strsplit(strat_var, "#")[[1]]
-				column_name <- parts[1]
-				filter_value <- parts[2]
-				selected_patids <- patient_data[get(column_name) == filter_value, patid]
-				presc <- presc[patid %in% selected_patids]
-			}
-
-			# Calculate with ORs
-			table_data <- create_prevalence_ratio_table(
-				presc_freq_df(),
-				"substance",
-				data_with_group = presc
+			# Build column definitions
+			columns <- list(
+				LTC = colDef(
+					name = "LTC",
+					minWidth = 200,
+					cell = create_significance_cell(result_table)
+				),
+				`Cases (%)` = colDef(format = colFormat(digits = 2)),
+				`Controls (%)` = colDef(format = colFormat(digits = 2))
 			)
+			columns <- c(columns, get_or_reactable_columns())
 
-			or_cols <- c("Substance", "Cases (%)", "Controls (%)",
-									 "OR", "OR_CI_lower", "OR_CI_upper")
-
-			table_data[, OR_formatted := sprintf("%.3f (%.3f - %.3f)", OR, OR_CI_lower, OR_CI_upper)]
-
-			if (all(c("OR", "p_value", "p_adj") %in% colnames(table_data))) {
-				colnames(table_data) <- c(or_cols, "p_value", "p_adj", "OR_formatted")
-
-				reactable(
-					table_data,
-					columns = list(
-						Substance = colDef(
-							name = "Substance",
-							cell = function(value, index) {
-								p_adj_val <- table_data[index, p_adj]
-								if (!is.na(p_adj_val) && p_adj_val < 0.05) {
-									paste0(value, "*")
-								} else {
-									value
-								}
-							}
-						),
-						OR_formatted = colDef(name = "OR (95% CI)", minWidth = 140),
-						`Cases (%)` = colDef(format = colFormat(digits = 2)),
-						`Controls (%)` = colDef(format = colFormat(digits = 2)),
-						OR = colDef(show = FALSE),
-						OR_CI_lower = colDef(show = FALSE),
-						OR_CI_upper = colDef(show = FALSE),
-						p_value = colDef(show = FALSE),
-						p_adj = colDef(show = FALSE)
-					),
-					details = function(index) {
-						p_val <- table_data[index, p_value]
-						p_adj_val <- table_data[index, p_adj]
-						if (is.na(p_val) & is.na(p_adj_val)) return(NULL)
-						htmltools::div(
-							style = "padding: 16px",
-							htmltools::tags$b("Statistical Testing:"),
-							htmltools::tags$div(
-								style = "margin-top: 8px",
-								sprintf("Raw p-value: %.4f", p_val)
-							),
-							htmltools::tags$div(
-								sprintf("Adjusted p-value: %.4f", p_adj_val)
-							),
-							htmltools::tags$div(
-								style = "margin-top: 8px; font-style: italic; color: #666;",
-								if (p_adj_val < 0.05) "Statistically significant (p < 0.05)" else "Not significant"
-							)
-						)
-					},
-					showPageInfo = FALSE,
-					showPageSizeOptions = TRUE,
-					compact = TRUE,
-					defaultPageSize = 15
-				)
-			} else {
-				colnames(table_data) <- c(or_cols)
-				reactable(table_data[order(-OR)], showPageInfo = FALSE, defaultPageSize = 15)
-			}
+			# Render with standard config
+			do.call(reactable, c(
+				list(
+					data = result_table,
+					columns = columns,
+					details = function(index) create_pvalue_details(index, result_table)
+				),
+				get_standard_reactable_config()
+			))
 		})
 
-		# LTC dropdown UI
-		output$ltc_dropdown_ui <- renderUI({
-			req(ltcs_r())
-			ltcs <- ltcs_r()
+		# ============================================================================
+		# LTC BY PRESCRIPTION FILTER
+		# ============================================================================
 
-			# Get LTC chapters for grouping
-			sub_chapter <- bnf_lookup[, .(BNF_Chemical_Substance, BNF_Section)] |> unique()
-			sub_chapter <- sub_chapter[, first(.SD), BNF_Chemical_Substance]
-
-			# For LTCs, we might not have BNF grouping, so just alphabetical
-			ltc_terms <- sort(unique(ltcs$term))
-
-			virtualSelectInput(
-				ns("ltc_dropdown"),
-				label = "Select 1 or more conditions:",
-				choices = ltc_terms,
-				multiple = TRUE,
-				search = TRUE
-			)
-		})
-
-		# Prescription dropdown UI
+		# Dynamic prescription dropdown
 		output$presc_dropdown_ui <- renderUI({
 			req(prescriptions_r())
+			current_level <- bnf_level
+			unique_substances <- unique(prescriptions_r()$substance)
 
-			# Get current BNF level from parent module
-			current_level <- bnf_level  # You'll need to pass this as a parameter
-
-			prescs <- prescriptions_r()
-			unique_substances <- unique(prescs$substance)
-
-			# Determine grouping strategy based on current level
 			if (current_level == "BNF_Chapter") {
-				# No grouping needed - just show chapters alphabetically
 				choices <- sort(unique_substances)
 			} else if (current_level == "BNF_Section") {
-				# Group by Chapter, show Sections
 				lookup_data <- bnf_lookup[BNF_Section %in% unique_substances,
 																	.(BNF_Section, BNF_Chapter)] |> unique()
 				lookup_data <- lookup_data[order(BNF_Chapter, BNF_Section)]
 				choices <- with(lookup_data, split(BNF_Section, BNF_Chapter))
 			} else if (current_level == "BNF_Paragraph") {
-				# Group by Section, show Paragraphs
 				lookup_data <- bnf_lookup[BNF_Paragraph %in% unique_substances,
 																	.(BNF_Paragraph, BNF_Section)] |> unique()
 				lookup_data <- lookup_data[order(BNF_Section, BNF_Paragraph)]
 				choices <- with(lookup_data, split(BNF_Paragraph, BNF_Section))
 			} else {  # BNF_Chemical_Substance
-				# Group by Paragraph, show Substances
 				lookup_data <- bnf_lookup[BNF_Chemical_Substance %in% unique_substances,
 																	.(BNF_Chemical_Substance, BNF_Paragraph)] |> unique()
 				lookup_data <- lookup_data[order(BNF_Paragraph, BNF_Chemical_Substance)]
@@ -404,12 +231,11 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 			)
 		})
 
-
 		# LTC by prescription table
 		output$ltc_by_presc <- renderReactable({
 			req(ltcs_r(), input$presc_dropdown)
 
-			result <- calculate_prevalence_cca(
+			result_table <- calculate_prevalence_cca(
 				ltcs_r(),
 				prescriptions_r(),
 				input$presc_dropdown,
@@ -417,57 +243,113 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 				"term"
 			)
 
-			validate(need(!is.null(result), "No results found for filter"))
+			validate(need(!is.null(result_table), "No results found for filter"))
 
-			result[, OR_formatted := sprintf("%.3f (%.3f - %.3f)", OR, OR_CI_lower, OR_CI_upper)]
-			browser()
-			reactable(
-				result,
-				columns = list(
-					term = colDef(
-						name = "Condition",
-						cell = function(value, index) {
-							p_adj_val <- result[index, p_adj]
-							if (!is.na(p_adj_val) && p_adj_val < 0.05) {
-								paste0(value, "*")
-							} else {
-								value
-							}
-						}
-					),
-					OR_formatted = colDef(name = "OR (95% CI)", minWidth = 140),
-					case = colDef(name = "Cases (%)", format = colFormat(digits = 2)),
-					control = colDef(name = "Controls (%)", format = colFormat(digits = 2)),
-					OR = colDef(show = FALSE),
-					OR_CI_lower = colDef(show = FALSE),
-					OR_CI_upper = colDef(show = FALSE),
-					p_value = colDef(show = FALSE),
-					p_adj = colDef(show = FALSE)
+			# Add formatted OR column
+			result_table <- add_or_formatted_column(result_table)
+
+			# Rename columns with standard names
+			col_names <- get_prevalence_column_names("LTC")
+			colnames(result_table) <- c(col_names, "p_value", "p_adj", "OR_formatted")
+
+			# Build column definitions
+			columns <- list(
+				LTC = colDef(
+					name = "LTC",
+					minWidth = 200,
+					cell = create_significance_cell(result_table)
 				),
-				details = function(index) {
-					p_val <- result[index, p_value]
-					p_adj_val <- result[index, p_adj]
-					if (is.na(p_val) & is.na(p_adj_val)) return(NULL)
-					htmltools::div(
-						style = "padding: 16px",
-						htmltools::tags$b("Statistical Testing:"),
-						htmltools::tags$div(
-							style = "margin-top: 8px",
-							sprintf("Raw p-value: %.4f", p_val)
-						),
-						htmltools::tags$div(
-							sprintf("Adjusted p-value: %.4f", p_adj_val)
-						),
-						htmltools::tags$div(
-							style = "margin-top: 8px; font-style: italic; color: #666;",
-							if (p_adj_val < 0.05) "Statistically significant (p < 0.05)" else "Not significant"
-						)
-					)
-				},
-				showPageInfo = FALSE,
-				showPageSizeOptions = TRUE,
-				compact = TRUE,
-				defaultPageSize = 15
+				`Cases (%)` = colDef(format = colFormat(digits = 2)),
+				`Controls (%)` = colDef(format = colFormat(digits = 2))
+			)
+			columns <- c(columns, get_or_reactable_columns())
+
+			# Render with standard config
+			do.call(reactable, c(
+				list(
+					data = result_table,
+					columns = columns,
+					details = function(index) create_pvalue_details(index, result_table)
+				),
+				get_standard_reactable_config()
+			))
+		})
+
+		# ============================================================================
+		# PRESCRIPTION PREVALENCE TABLES
+		# ============================================================================
+
+		# Prescription frequency with optional stratification
+		presc_freq_df <- reactive({
+			req(prescriptions_r())
+			presc_filtered <- apply_patient_stratification(
+				prescriptions_r(),
+				input$presc_freq_strat_variable,
+				patient_data_r()
+			)
+			calculate_frequency_stats(presc_filtered, "substance")
+		})
+
+		# Render prescription frequency table
+		output$presc_freq_table <- renderReactable({
+			req(prescriptions_r())
+
+			# Apply stratification and calculate with ORs
+			presc_filtered <- apply_patient_stratification(
+				prescriptions_r(),
+				input$presc_freq_strat_variable,
+				patient_data_r()
+			)
+
+			result_table <- create_prevalence_ratio_table(
+				presc_freq_df(),
+				"substance",
+				data_with_group = presc_filtered
+			)
+
+			# Add formatted OR column
+			result_table <- add_or_formatted_column(result_table)
+
+			# Rename columns with standard names
+			col_names <- get_prevalence_column_names("Substance")
+			colnames(result_table) <- c(col_names, "p_value", "p_adj", "OR_formatted")
+
+			# Build column definitions
+			columns <- list(
+				Substance = colDef(
+					name = "Substance",
+					minWidth = 200,
+					cell = create_significance_cell(result_table)
+				),
+				`Cases (%)` = colDef(format = colFormat(digits = 2)),
+				`Controls (%)` = colDef(format = colFormat(digits = 2))
+			)
+			columns <- c(columns, get_or_reactable_columns())
+
+			# Render with standard config
+			do.call(reactable, c(
+				list(
+					data = result_table,
+					columns = columns,
+					details = function(index) create_pvalue_details(index, result_table)
+				),
+				get_standard_reactable_config()
+			))
+		})
+
+		# ============================================================================
+		# PRESCRIPTION BY LTC FILTER
+		# ============================================================================
+
+		# Dynamic LTC dropdown
+		output$ltc_dropdown_ui <- renderUI({
+			req(ltcs_r())
+			virtualSelectInput(
+				ns("ltc_dropdown"),
+				label = "Select 1 or more conditions:",
+				choices = sort(unique(ltcs_r()$term)),
+				multiple = TRUE,
+				search = TRUE
 			)
 		})
 
@@ -475,7 +357,7 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 		output$presc_by_ltc <- renderReactable({
 			req(prescriptions_r(), input$ltc_dropdown)
 
-			result <- calculate_prevalence_cca(
+			result_table <- calculate_prevalence_cca(
 				prescriptions_r(),
 				ltcs_r(),
 				input$ltc_dropdown,
@@ -483,341 +365,204 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 				"substance"
 			)
 
-			validate(need(!is.null(result), "No results found for filter"))
+			validate(need(!is.null(result_table), "No results found for filter"))
 
-			result[, OR_formatted := sprintf("%.3f (%.3f - %.3f)", OR, OR_CI_lower, OR_CI_upper)]
+			# Add formatted OR column
+			result_table <- add_or_formatted_column(result_table)
 
-			reactable(
-				result,
-				columns = list(
-					substance = colDef(
-						name = "Substance",
-						cell = function(value, index) {
-							p_adj_val <- result[index, p_adj]
-							if (!is.na(p_adj_val) && p_adj_val < 0.05) {
-								paste0(value, "*")
-							} else {
-								value
-							}
-						}
-					),
-					OR_formatted = colDef(name = "OR (95% CI)", minWidth = 140),
-					case = colDef(name = "Cases (%)", format = colFormat(digits = 2)),
-					control = colDef(name = "Controls (%)", format = colFormat(digits = 2)),
-					OR = colDef(show = FALSE),
-					OR_CI_lower = colDef(show = FALSE),
-					OR_CI_upper = colDef(show = FALSE),
-					p_value = colDef(show = FALSE),
-					p_adj = colDef(show = FALSE)
+			# Rename columns with standard names
+			col_names <- get_prevalence_column_names("Substance")
+			colnames(result_table) <- c(col_names, "p_value", "p_adj", "OR_formatted")
+
+			# Build column definitions
+			columns <- list(
+				Substance = colDef(
+					name = "Substance",
+					minWidth = 200,
+					cell = create_significance_cell(result_table)
 				),
-				details = function(index) {
-					p_val <- result[index, p_value]
-					p_adj_val <- result[index, p_adj]
-					if (is.na(p_val) & is.na(p_adj_val)) return(NULL)
-					htmltools::div(
-						style = "padding: 16px",
-						htmltools::tags$b("Statistical Testing:"),
-						htmltools::tags$div(
-							style = "margin-top: 8px",
-							sprintf("Raw p-value: %.4f", p_val)
-						),
-						htmltools::tags$div(
-							sprintf("Adjusted p-value: %.4f", p_adj_val)
-						),
-						htmltools::tags$div(
-							style = "margin-top: 8px; font-style: italic; color: #666;",
-							if (p_adj_val < 0.05) "Statistically significant (p < 0.05)" else "Not significant"
-						)
-					)
-				},
-				showPageInfo = FALSE,
-				defaultPageSize = 15
+				`Cases (%)` = colDef(format = colFormat(digits = 2)),
+				`Controls (%)` = colDef(format = colFormat(digits = 2))
 			)
+			columns <- c(columns, get_or_reactable_columns())
+
+			# Render with standard config
+			do.call(reactable, c(
+				list(
+					data = result_table,
+					columns = columns,
+					details = function(index) create_pvalue_details(index, result_table)
+				),
+				get_standard_reactable_config()
+			))
 		})
 
-		# ========== NEW SECTION: Recent prescriptions (from case_controls_r) ==========
+		# ============================================================================
+		# RECENT PRESCRIPTIONS (from cases_controls_r)
+		# ============================================================================
 
-		# Recent prescription frequency with optional stratification
-		recent_presc_freq_df <- reactive({
-			req(cases_controls_r())
+		if (!is.null(cases_controls_r)) {
 
-			# cases_controls_r has: patid, index_date, substance, group
-			# We need to add strata for calculate_frequency_stats
-			recent_presc_with_strata <- merge(
-				cases_controls_r(),
-				patient_data_r()[, .(patid, strata)],
-				by = "patid"
-			)
+			# Recent prescription frequency with optional stratification
+			recent_presc_freq_df <- reactive({
+				req(cases_controls_r())
 
-			strat_var <- input$recent_presc_freq_strat_variable
-
-			if (strat_var != "") {
-				parts <- strsplit(strat_var, "#")[[1]]
-				column_name <- parts[1]
-				filter_value <- parts[2]
-				selected_patids <- patient_data_r()[get(column_name) == filter_value, patid]
-				recent_presc_with_strata <- recent_presc_with_strata[patid %in% selected_patids]
-			}
-
-			calculate_frequency_stats(recent_presc_with_strata, "substance")
-		})
-
-		output$recent_presc_freq_table <- renderReactable({
-			req(cases_controls_r())
-
-			# Get data with strata for OR calculation
-			recent_presc_with_strata <- merge(
-				cases_controls_r(),
-				patient_data_r()[, .(patid, strata)],
-				by = "patid"
-			)
-
-			strat_var <- input$recent_presc_freq_strat_variable
-
-			# Apply same stratification filter
-			if (strat_var != "") {
-				parts <- strsplit(strat_var, "#")[[1]]
-				column_name <- parts[1]
-				filter_value <- parts[2]
-				selected_patids <- patient_data_r()[get(column_name) == filter_value, patid]
-				recent_presc_with_strata <- recent_presc_with_strata[patid %in% selected_patids]
-			}
-
-			# Calculate with ORs
-			table_data <- create_prevalence_ratio_table(
-				recent_presc_freq_df(),
-				"substance",
-				data_with_group = recent_presc_with_strata
-			)
-
-			or_cols <- c("Substance", "Cases (%)", "Controls (%)",
-									 "OR", "OR_CI_lower", "OR_CI_upper")
-
-			table_data[, OR_formatted := sprintf("%.3f (%.3f - %.3f)", OR, OR_CI_lower, OR_CI_upper)]
-
-			if (all(c("OR", "p_value", "p_adj") %in% colnames(table_data))) {
-				colnames(table_data) <- c(or_cols, "p_value", "p_adj", "OR_formatted")
-
-				reactable(
-					table_data,
-					columns = list(
-						Substance = colDef(
-							name = "Substance",
-							cell = function(value, index) {
-								p_adj_val <- table_data[index, p_adj]
-								if (!is.na(p_adj_val) && p_adj_val < 0.05) {
-									paste0(value, "*")
-								} else {
-									value
-								}
-							}
-						),
-						OR_formatted = colDef(name = "OR (95% CI)", minWidth = 140),
-						`Cases (%)` = colDef(format = colFormat(digits = 2)),
-						`Controls (%)` = colDef(format = colFormat(digits = 2)),
-						OR = colDef(show = FALSE),
-						OR_CI_lower = colDef(show = FALSE),
-						OR_CI_upper = colDef(show = FALSE),
-						p_value = colDef(show = FALSE),
-						p_adj = colDef(show = FALSE)
-					),
-					details = function(index) {
-						p_val <- table_data[index, p_value]
-						p_adj_val <- table_data[index, p_adj]
-						if (is.na(p_val) & is.na(p_adj_val)) return(NULL)
-						htmltools::div(
-							style = "padding: 16px",
-							htmltools::tags$b("Statistical Testing:"),
-							htmltools::tags$div(
-								style = "margin-top: 8px",
-								sprintf("Raw p-value: %.4f", p_val)
-							),
-							htmltools::tags$div(
-								sprintf("Adjusted p-value: %.4f", p_adj_val)
-							),
-							htmltools::tags$div(
-								style = "margin-top: 8px; font-style: italic; color: #666;",
-								if (p_adj_val < 0.05) "Statistically significant (p < 0.05)" else "Not significant"
-							)
-						)
-					},
-					showPageInfo = FALSE,
-					showPageSizeOptions = TRUE,
-					searchable = TRUE,
-					compact = TRUE,
-					defaultPageSize = 15
+				# Add strata for calculate_frequency_stats
+				recent_presc_with_strata <- merge(
+					cases_controls_r(),
+					patient_data_r()[, .(patid, strata)],
+					by = "patid"
 				)
-			} else {
-				colnames(table_data) <- c(or_cols)
-				reactable(table_data[order(-OR)], showPageInfo = FALSE, defaultPageSize = 15)
-			}
-		})
 
-		# LTC dropdown for recent prescriptions filter
-		output$recent_ltc_dropdown_ui <- renderUI({
-			req(ltcs_r())
-			ltc_terms <- sort(unique(ltcs_r()$term))
+				recent_presc_filtered <- apply_patient_stratification(
+					recent_presc_with_strata,
+					input$recent_presc_freq_strat_variable,
+					patient_data_r()
+				)
 
-			virtualSelectInput(
-				ns("recent_ltc_dropdown"),
-				label = "Filter by conditions:",
-				choices = ltc_terms,
-				multiple = TRUE,
-				search = TRUE
-			)
-		})
+				calculate_frequency_stats(recent_presc_filtered, "substance")
+			})
 
-		# Background prescription dropdown for recent prescriptions filter
-		output$recent_bg_presc_dropdown_ui <- renderUI({
-			req(prescriptions_r())
+			# Render recent prescription frequency table
+			output$recent_presc_freq_table <- renderReactable({
+				req(cases_controls_r())
 
-			current_level <- bnf_level
+				# Get data with strata for OR calculation
+				recent_presc_with_strata <- merge(
+					cases_controls_r(),
+					patient_data_r()[, .(patid, strata)],
+					by = "patid"
+				)
 
-			prescs <- prescriptions_r()
-			unique_substances <- unique(prescs$substance)
+				recent_presc_filtered <- apply_patient_stratification(
+					recent_presc_with_strata,
+					input$recent_presc_freq_strat_variable,
+					patient_data_r()
+				)
 
-			if (current_level == "BNF_Chapter") {
-				choices <- sort(unique_substances)
-			} else if (current_level == "BNF_Section") {
-				lookup_data <- bnf_lookup[BNF_Section %in% unique_substances,
-																	.(BNF_Section, BNF_Chapter)] |> unique()
-				lookup_data <- lookup_data[order(BNF_Chapter, BNF_Section)]
-				choices <- with(lookup_data, split(BNF_Section, BNF_Chapter))
-			} else if (current_level == "BNF_Paragraph") {
-				lookup_data <- bnf_lookup[BNF_Paragraph %in% unique_substances,
-																	.(BNF_Paragraph, BNF_Section)] |> unique()
-				lookup_data <- lookup_data[order(BNF_Section, BNF_Paragraph)]
-				choices <- with(lookup_data, split(BNF_Paragraph, BNF_Section))
-			} else {
-				lookup_data <- bnf_lookup[BNF_Chemical_Substance %in% unique_substances,
-																	.(BNF_Chemical_Substance, BNF_Paragraph)] |> unique()
-				lookup_data <- lookup_data[order(BNF_Paragraph, BNF_Chemical_Substance)]
-				choices <- with(lookup_data, split(BNF_Chemical_Substance, BNF_Paragraph))
-			}
+				result_table <- create_prevalence_ratio_table(
+					recent_presc_freq_df(),
+					"substance",
+					data_with_group = recent_presc_filtered
+				)
 
-			virtualSelectInput(
-				ns("recent_bg_presc_dropdown"),
-				label = "Filter by background medications:",
-				choices = choices,
-				multiple = TRUE,
-				search = TRUE
-			)
-		})
+				# Add formatted OR column
+				result_table <- add_or_formatted_column(result_table)
 
-		# Recent prescriptions by BOTH LTC and background medication filter
-		output$recent_by_ltc_and_presc <- renderReactable({
-			req(cases_controls_r())
+				# Rename columns with standard names
+				col_names <- get_prevalence_column_names("Substance")
+				colnames(result_table) <- c(col_names, "p_value", "p_adj", "OR_formatted")
 
-			# Need at least one filter selected
-			has_ltc_filter <- !is.null(input$recent_ltc_dropdown) && length(input$recent_ltc_dropdown) > 0
-			has_presc_filter <- !is.null(input$recent_bg_presc_dropdown) && length(input$recent_bg_presc_dropdown) > 0
+				# Build column definitions
+				columns <- list(
+					Substance = colDef(
+						name = "Substance",
+						minWidth = 200,
+						cell = create_significance_cell(result_table)
+					),
+					`Cases (%)` = colDef(format = colFormat(digits = 2)),
+					`Controls (%)` = colDef(format = colFormat(digits = 2))
+				)
+				columns <- c(columns, get_or_reactable_columns())
 
-			validate(need(has_ltc_filter || has_presc_filter,
-										"Please select at least one condition or background medication"))
+				# Render with standard config
+				do.call(reactable, c(
+					list(
+						data = result_table,
+						columns = columns,
+						details = function(index) create_pvalue_details(index, result_table)
+					),
+					get_standard_reactable_config()
+				))
+			})
 
-			# Start with all patients
-			filtered_patids <- unique(patient_data_r()$patid)
+			# Dynamic LTC and background prescription dropdowns for filtering
+			output$recent_ltc_dropdown_ui <- renderUI({
+				req(ltcs_r())
+				virtualSelectInput(
+					ns("recent_ltc_dropdown"),
+					label = "Filter by LTCs:",
+					choices = sort(unique(ltcs_r()$term)),
+					multiple = TRUE,
+					search = TRUE
+				)
+			})
 
-			# Filter by LTCs if selected
-			if (has_ltc_filter) {
+			output$recent_bg_presc_dropdown_ui <- renderUI({
+				req(prescriptions_r())
+				virtualSelectInput(
+					ns("recent_bg_presc_dropdown"),
+					label = "Filter by background prescriptions:",
+					choices = sort(unique(prescriptions_r()$substance)),
+					multiple = TRUE,
+					search = TRUE
+				)
+			})
+
+			# Recent prescriptions by LTC and background prescription filter
+			output$recent_by_ltc_and_presc <- renderReactable({
+				req(cases_controls_r())
+				req(input$recent_ltc_dropdown, input$recent_bg_presc_dropdown)
+
+				# Filter patients by LTC
 				ltc_patids <- unique(ltcs_r()[term %in% input$recent_ltc_dropdown, patid])
-				filtered_patids <- bit64::as.integer64(intersect(as.character(filtered_patids), as.character(ltc_patids)))
-			}
 
-			# Filter by background prescriptions if selected
-			if (has_presc_filter) {
-				presc_patids <- unique(prescriptions_r()[substance %in% input$recent_bg_presc_dropdown, patid])
-				filtered_patids <- bit64::as.integer64(intersect(as.character(filtered_patids), as.character(presc_patids)))
-			}
+				# Filter patients by background prescription
+				bg_presc_patids <- unique(prescriptions_r()[substance %in% input$recent_bg_presc_dropdown, patid])
 
-			validate(need(length(filtered_patids) > 0,
-										"No patients match the selected filters"))
+				# Get intersection
+				filtered_patids <- intersect(ltc_patids, bg_presc_patids)
 
-			# Filter recent prescriptions to these patients and add strata
-			recent_presc_filtered <- cases_controls_r()[patid %in% filtered_patids]
-			recent_presc_filtered <- merge(
-				recent_presc_filtered,
-				patient_data_r()[, .(patid, strata)],
-				by = "patid"
-			)
-
-			# Calculate frequencies
-			freq <- calculate_frequency_stats(recent_presc_filtered, "substance")
-
-			# Calculate prevalence table with ORs
-			result <- create_prevalence_ratio_table(
-				freq,
-				"substance",
-				min_pct = 1,
-				data_with_group = recent_presc_filtered
-			)
-
-			validate(need(!is.null(result) && nrow(result) > 0,
-										"No results found for the selected filters"))
-
-			or_cols <- c("Substance", "Cases (%)", "Controls (%)",
-									 "OR", "OR_CI_lower", "OR_CI_upper")
-
-			result[, OR_formatted := sprintf("%.3f (%.3f - %.3f)", OR, OR_CI_lower, OR_CI_upper)]
-
-			if (all(c("OR", "p_value", "p_adj") %in% colnames(result))) {
-				colnames(result) <- c(or_cols, "p_value", "p_adj", "OR_formatted")
-
-				reactable(
-					result,
-					columns = list(
-						Substance = colDef(
-							name = "Substance",
-							cell = function(value, index) {
-								p_adj_val <- result[index, p_adj]
-								if (!is.na(p_adj_val) && p_adj_val < 0.05) {
-									paste0(value, "*")
-								} else {
-									value
-								}
-							}
-						),
-						OR_formatted = colDef(name = "OR (95% CI)", minWidth = 140),
-						`Cases (%)` = colDef(format = colFormat(digits = 2)),
-						`Controls (%)` = colDef(format = colFormat(digits = 2)),
-						OR = colDef(show = FALSE),
-						OR_CI_lower = colDef(show = FALSE),
-						OR_CI_upper = colDef(show = FALSE),
-						p_value = colDef(show = FALSE),
-						p_adj = colDef(show = FALSE)
-					),
-					details = function(index) {
-						p_val <- result[index, p_value]
-						p_adj_val <- result[index, p_adj]
-						if (is.na(p_val) & is.na(p_adj_val)) return(NULL)
-						htmltools::div(
-							style = "padding: 16px",
-							htmltools::tags$b("Statistical Testing:"),
-							htmltools::tags$div(
-								style = "margin-top: 8px",
-								sprintf("Raw p-value: %.4f", p_val)
-							),
-							htmltools::tags$div(
-								sprintf("Adjusted p-value: %.4f", p_adj_val)
-							),
-							htmltools::tags$div(
-								style = "margin-top: 8px; font-style: italic; color: #666;",
-								if (p_adj_val < 0.05) "Statistically significant (p < 0.05)" else "Not significant"
-							)
-						)
-					},
-					showPageInfo = FALSE,
-					searchable = TRUE,
-					showPageSizeOptions = TRUE,
-					defaultPageSize = 15,
-					compact = TRUE
+				# Filter recent prescriptions to these patients
+				recent_presc_filtered <- merge(
+					cases_controls_r()[patid %in% filtered_patids],
+					patient_data_r()[, .(patid, strata)],
+					by = "patid"
 				)
-			} else {
-				colnames(result) <- c(or_cols)
-				setorder(result, -OR)
-				reactable(result, showPageInfo = FALSE, defaultPageSize = 15)
-			}
-		})
 
+				# Calculate frequencies
+				freq <- calculate_frequency_stats(recent_presc_filtered, "substance")
+
+				# Calculate prevalence table with ORs
+				result_table <- create_prevalence_ratio_table(
+					freq,
+					"substance",
+					min_pct = 1,
+					data_with_group = recent_presc_filtered
+				)
+
+				validate(need(!is.null(result_table) && nrow(result_table) > 0,
+											"No results found for the selected filters"))
+
+				# Add formatted OR column
+				result_table <- add_or_formatted_column(result_table)
+
+				# Rename columns with standard names
+				col_names <- get_prevalence_column_names("Substance")
+				colnames(result_table) <- c(col_names, "p_value", "p_adj", "OR_formatted")
+
+				# Build column definitions
+				columns <- list(
+					Substance = colDef(
+						name = "Substance",
+						minWidth = 200,
+						cell = create_significance_cell(result_table)
+					),
+					`Cases (%)` = colDef(format = colFormat(digits = 2)),
+					`Controls (%)` = colDef(format = colFormat(digits = 2))
+				)
+				columns <- c(columns, get_or_reactable_columns())
+
+				# Render with standard config
+				do.call(reactable, c(
+					list(
+						data = result_table,
+						columns = columns,
+						details = function(index) create_pvalue_details(index, result_table)
+					),
+					get_standard_reactable_config()
+				))
+			})
+		}
 	})
 }
