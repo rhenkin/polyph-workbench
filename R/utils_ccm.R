@@ -23,7 +23,13 @@ debug_dt_for_rbind <- function(dt, name) {
 #' @param outcome_prescriptions data.table with outcome prescription data
 #' @return list with all study data components
 prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_cp, gold_ltc,
-																outcome_prescriptions) {
+																outcome_prescriptions,
+															 n_initial_cohort = NULL,
+															 n_total_database = NULL,
+															 eligible_pool_size = NULL,
+															 pred_window = NULL,
+															 match_ratio = NULL,
+															 patient_filters = NULL) {
 	# Validate inputs
 	if (!all(c("patid", "outcome_date") %in% colnames(cases))) {
 		stop("cases must have columns: patid, index_date, outcome_date")
@@ -152,10 +158,80 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 		study_name = study_name
 	)]
 
-#     debug_dt_for_rbind(matched_cases, "matched_cases")
-# 	debug_dt_for_rbind(matched_controls, "matched_controls")
+
 	matched_patids <- rbindlist(list(matched_cases, matched_controls), use.names = TRUE)
   setkey(matched_patids, strata, patid)
+
+  # ========================================================================
+  # CREATE FLOW DIAGRAM DATA
+  # ========================================================================
+
+  # Build eligibility criteria description
+  eligibility_parts <- c()
+
+  if (!is.null(patient_filters)) {
+  	if (!is.null(patient_filters$input_list$sex) && length(patient_filters$input_list$sex) > 0) {
+  		eligibility_parts <- c(eligibility_parts,
+  													 sprintf("sex (%s)", paste(patient_filters$input_list$sex, collapse = ", ")))
+  	}
+
+  	if (!is.null(patient_filters$input_list$eth_group) && length(patient_filters$input_list$eth_group) > 0) {
+  		eligibility_parts <- c(eligibility_parts,
+  													 sprintf("ethnicity (%s)", paste(patient_filters$input_list$eth_group, collapse = ", ")))
+  	}
+
+  	if (!is.null(patient_filters$imd_quintile) && length(patient_filters$imd_quintile) > 0) {
+  		eligibility_parts <- c(eligibility_parts,
+  													 sprintf("IMD quintile (%s)", paste(patient_filters$imd_quintile, collapse = ", ")))
+  	}
+
+  	if (!is.null(patient_filters$selected_ltcs) && length(patient_filters$selected_ltcs) > 0) {
+  		eligibility_parts <- c(eligibility_parts,
+  													 sprintf("specific LTCs (%s)", paste(patient_filters$selected_ltcs, collapse = ", ")))
+  	}
+  }
+
+  eligibility_parts <- c(eligibility_parts, "multimorbidity (≥2 LTCs)")
+
+  flow_diagram_data <- list(
+  	# Database starting point
+  	n_total_database = n_total_database,
+
+  	# Initial cohort after Phase 1 filters
+  	n_initial_cohort = n_initial_cohort,
+  	n_excluded_initial = if (!is.null(n_total_database) && !is.null(n_initial_cohort)) {
+  		n_total_database - n_initial_cohort
+  	} else {
+  		NA
+  	},
+
+  	# Cases
+  	n_cases_after_pred_window = n_cases,
+  	n_excluded_pred_window = if (!is.null(n_initial_cohort)) {
+  		n_initial_cohort - n_cases
+  	} else {
+  		NA
+  	},
+
+  	# Control pool
+  	n_eligible_control_pool = eligible_pool_size,
+
+  	# Final controls
+  	n_controls_sampled_total = nrow(controls),
+  	n_controls_unique = n_controls,
+
+  	# Study parameters
+  	pred_window = pred_window,
+  	match_ratio = match_ratio,
+
+  	# Eligibility criteria
+  	eligibility_criteria = paste(eligibility_parts, collapse = "; "),
+
+  	# Date generated
+  	generated_date = Sys.Date()
+  )
+
+
 
 	# ========================================================================
 	# Create study metadata
@@ -172,7 +248,8 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 		control_date_range = range(controls$control_index_date),
 		created_date = Sys.Date(),
 		matching_method = "stratified_sampling",
-		strata_variable = "stratum_first_presc_bin"
+		strata_variable = "stratum_first_presc_bin",
+		flow_diagram = flow_diagram_data
 	)
 
 	# ========================================================================
@@ -196,7 +273,13 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 }
 
 save_matched_datasets <- function(study_name, cases, controls, gold_patient, gold_cp, gold_ltc,
-																	outcome_prescriptions, study_dir = "studies") {
+																	outcome_prescriptions, study_dir = "studies",
+																	n_initial_cohort = NULL,
+																	n_total_database = NULL,
+																	eligible_pool_size = NULL,
+																	pred_window = NULL,
+																	match_ratio = NULL,
+																	patient_filters = NULL) {
 	# Create directory if it doesn't exist
 	if (!dir.exists(study_dir)) {
 		dir.create(study_dir, recursive = TRUE)
@@ -210,7 +293,13 @@ save_matched_datasets <- function(study_name, cases, controls, gold_patient, gol
 		gold_patient = gold_patient,
 		gold_cp = gold_cp,
 		gold_ltc = gold_ltc,
-		outcome_prescriptions = outcome_prescriptions
+		outcome_prescriptions = outcome_prescriptions,
+		n_initial_cohort = n_initial_cohort,
+		n_total_database = n_total_database,
+		eligible_pool_size = eligible_pool_size,
+		pred_window = pred_window,
+		match_ratio = match_ratio,
+		patient_filters = patient_filters
 	)
 
 	# Save to disk

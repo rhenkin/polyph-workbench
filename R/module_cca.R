@@ -37,10 +37,16 @@ module_cca_ui <- function(id) {
 				value = "analysis_panel",
 				icon = bs_icon("bar-chart-line"),
 				# BNF level selection at the top of analysis panel
-				selectInput(ns("cca_bnf_level"),
-										label = "Select BNF level for analysis:",
-										choices = c("BNF_Chapter", "BNF_Section", "BNF_Paragraph", "BNF_Chemical_Substance"),
-										selected = "BNF_Chemical_Substance"),
+				flowLayout(
+					selectInput(ns("cca_bnf_level"),
+											label = "Select BNF level for analysis:",
+											choices = c("BNF_Chapter", "BNF_Section", "BNF_Paragraph", "BNF_Chemical_Substance"),
+											selected = "BNF_Chemical_Substance"),
+					downloadButton(ns("download_flow_diagram"),
+												 "Download Flow Diagram",
+												 class = "btn-primary",
+												 icon = icon("diagram-project"))
+				),
 				navset_card_tab(
 					nav_panel(
 						title = "Overview",
@@ -512,6 +518,68 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 			grouped_bar_plot(freq_data, "eth_group", height = 250, width = 300) |>
 				as_vegaspec()
 		})
+
+		# Download flow diagram
+		output$download_flow_diagram <- downloadHandler(
+			filename = function() {
+				study_name <- if (!is.null(patient_data_r())) {
+					# Try to get study name from loaded data
+					patient_data_r()[1, study_name]
+				} else {
+					"study"
+				}
+				paste0(study_name, "_flow_diagram_", Sys.Date(), ".txt")
+			},
+			content = function(file) {
+				req(patient_data_r())
+
+				# Get metadata from loaded study
+				# We need to store metadata separately or access it from the loaded study
+				# For now, check if we have prepared_study_data_r
+				if (!is.null(prepared_study_data_r) && !is.null(prepared_study_data_r())) {
+					metadata <- prepared_study_data_r()$metadata
+				} else {
+					# If loaded from disk, we need to access the original RDS file
+					# Get the dataset name from dataset_list_selection
+					if (input$dataset_source == "disk" && !is.null(input$dataset_list_selection)) {
+						study_data <- readRDS(file.path("studies", input$dataset_list_selection))
+						metadata <- study_data$metadata
+					} else {
+						showNotification("Could not access study metadata for flow diagram",
+														 type = "error", duration = 5)
+						return(NULL)
+					}
+				}
+
+				# Check if flow diagram data exists
+				if (is.null(metadata$flow_diagram)) {
+					warning_text <- paste0(
+						"Flow Diagram Data Not Available\n\n",
+						"This study was created with an older version that did not capture ",
+						"flow diagram information.\n\n",
+						"To generate a flow diagram, please recreate the matched cohort using ",
+						"the current version of the Case-Control Matching module.\n\n",
+						"Study: ", metadata$study_name, "\n",
+						"Created: ", metadata$created_date
+					)
+					writeLines(warning_text, file)
+					return()
+				}
+
+				# Generate and write flow diagram text
+				tryCatch({
+					flow_text <- generate_flow_diagram_text(metadata)
+					writeLines(flow_text, file)
+				}, error = function(e) {
+					error_text <- paste0(
+						"Error Generating Flow Diagram\n\n",
+						"An error occurred: ", e$message, "\n\n",
+						"Study: ", metadata$study_name
+					)
+					writeLines(error_text, file)
+				})
+			}
+		)
 
 		module_cca_sociodemographics_server(
 			id = "sociodemog",

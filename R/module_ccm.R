@@ -169,6 +169,8 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 		cases_r <- reactiveVal(NULL)
 		controls_r <- reactiveVal(NULL)
 		prepared_study_data_r <- reactiveVal(NULL)
+		eligible_pool_size_r <- reactiveVal(NULL)
+
 		# Main workflow: Create matched cohort
 		observeEvent(input$create_cohort, {
 			req(input$study_name)
@@ -207,6 +209,7 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 				# Store results
 				cases_r(result$cases)
 				controls_r(result$controls)
+				eligible_pool_size_r(result$eligible_pool_size)
 
 				# Update UI
 				output$show_results <- reactive({ TRUE })
@@ -284,7 +287,13 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 					gold_patient = gold_patient,
 					gold_cp = gold_cp,
 					gold_ltc = gold_ltc,
-					outcome_prescriptions = outcome_prescriptions()
+					outcome_prescriptions = outcome_prescriptions(),
+					n_initial_cohort = uniqueN(outcome_prescriptions()$patid),
+					n_total_database = nrow(gold_patient),
+					eligible_pool_size = eligible_pool_size_r(),
+					pred_window = input$pred_window,
+					match_ratio = input$match_ratio,
+					patient_filters = patient_filter
 				)
 
 				prepared_study_data_r(study_data)
@@ -312,7 +321,13 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 					gold_cp = gold_cp,
 					gold_ltc = gold_ltc,
 					outcome_prescriptions = outcome_prescriptions(),
-					study_dir = study_dir
+					study_dir = study_dir,
+					n_initial_cohort = uniqueN(outcome_prescriptions()$patid),
+					n_total_database = nrow(gold_patient),
+					eligible_pool_size = eligible_pool_size_r(),
+					pred_window = input$pred_window,
+					match_ratio = input$match_ratio,
+					patient_filters = patient_filter
 				)
 
 				showNotification(paste("Study", input$study_name, "saved successfully!"),

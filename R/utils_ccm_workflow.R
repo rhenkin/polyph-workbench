@@ -16,7 +16,7 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 																					 progress,
 																					 patient_filters = NULL,
 																					 prescription_filter = list(enabled = FALSE)) {
-
+	set.seed(42)
 	# Step 1: Build cases table
 	progress$set(message = "Filtering prescription risk table", value = 0.2, detail = "Building cases table")
 
@@ -68,9 +68,12 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 		match_ratio = match_ratio
 	)
 
+	eligible_pool_size <- nrow(eligible_pool)
+
 	return(list(
 		cases = cases,
-		controls = controls
+		controls = controls,
+		eligible_pool_size = eligible_pool_size
 	))
 }
 
@@ -88,7 +91,7 @@ build_cases_table <- function(outcome_prescriptions,
 															patient_data,
 															pred_window,
 															patient_filters) {
-
+	browser()
 	# Get case patient IDs and outcome dates
 	outcomes <- outcome_prescriptions[, .(patid, outcome_date = eventdate)] |> unique()
 	case_patids <- unique(outcomes$patid)
