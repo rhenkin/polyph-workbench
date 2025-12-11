@@ -78,7 +78,6 @@ module_cca_logreg_ui <- function(id) {
 					ns("subgroup_filter"),
 					"Filter analysis to specific subgroup (optional):",
 					choices = list(
-						"All patients" = list("all" = "All patients"),
 						"Sex" = list(),
 						"Ethnicity" = list(),
 						"PP burden" = list(),
@@ -86,6 +85,7 @@ module_cca_logreg_ui <- function(id) {
 					),
 					selected = "all",
 					search = TRUE,
+					hideClearButton = FALSE,
 					dropboxWrapper = "body"
 				),
 
@@ -104,6 +104,14 @@ module_cca_logreg_ui <- function(id) {
 						tags$strong("Note: "),
 						"Interaction models will fit separate models for each medication pair. ",
 						"Selecting specific medications is strongly recommended to avoid long computation times."
+					),
+					numericInput(
+						ns("interaction_min_coprescription_prev"),
+						"Minimum co-prescription prevalence (%):",
+						value = 1,
+						min = 0.1,
+						max = 10,
+						step = 0.1
 					)
 				),
 
@@ -128,7 +136,7 @@ module_cca_logreg_ui <- function(id) {
 					reactableOutput(ns("logreg_results_table"))
 				)
 			),
-			nav_panel("Prescription × PP interaction model",
+			nav_panel("New prescription × PP interaction model",
 
 								p("Model interactions between the most recent prescription and polypharmacy burden groups, adjusting for selected LTCs."),
 
@@ -149,6 +157,15 @@ module_cca_logreg_ui <- function(id) {
 									search = TRUE,
 									dropboxWrapper = "body"
 								),
+								virtualSelectInput(
+									ns("interaction_subgroup_filter"),
+									"Filter analysis to specific subgroup (optional):",
+									choices = NULL,
+									selected = "all",
+									search = TRUE,
+									hideClearButton = FALSE,
+									dropboxWrapper = "body"
+								),
 
 								actionButton(ns("run_pp_interaction"), "Run Model", class = "btn-primary"),
 
@@ -164,8 +181,6 @@ module_cca_logreg_ui <- function(id) {
 										tags$strong("Model:"), " Most recent prescription × PP group interaction, adjusting for selected LTCs",
 										tags$br(),
 										tags$code("treatment ~ medication + pp_group + medication:pp_group + LTCs + stratum"),
-										tags$br(),
-										tags$small("PP groups: 0-2, 2-5, 5-10, 10+ concurrent medications")
 									),
 									downloadButton(ns("download_pp_interaction_results"), "Download Results", class = "btn-sm btn-secondary"),
 									br(), br(),
@@ -211,18 +226,38 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 					paste0("Ethnicity: ", unique(patient_data$eth_group))
 				),
 				"PP burden" = setNames(
-					paste0("pp_group#", unique(patient_data$pp_group)),
-					paste0("PP: ", unique(patient_data$pp_group))
+					paste0("pp_group#", levels(patient_data$pp_group)),
+					paste0("PP: ", levels(patient_data$pp_group))
 				),
 				"MLTC burden" = setNames(
-					paste0("mltc_group#", unique(patient_data$mltc_group)),
-					paste0("MLTC: ", unique(patient_data$mltc_group))
+					paste0("mltc_group#", levels(patient_data$mltc_group)),
+					paste0("MLTC: ", levels(patient_data$mltc_group))
+				)
+			)
+
+			subgroup_choices_inter <- list(
+				"Sex" = setNames(
+					paste0("sex#", unique(patient_data$sex)),
+					paste0("Sex: ", unique(patient_data$sex))
+				),
+				"Ethnicity" = setNames(
+					paste0("eth_group#", unique(patient_data$eth_group)),
+					paste0("Ethnicity: ", unique(patient_data$eth_group))
+				),
+				"MLTC burden" = setNames(
+					paste0("mltc_group#", levels(patient_data$mltc_group)),
+					paste0("MLTC: ", levels(patient_data$mltc_group))
 				)
 			)
 
 			updateVirtualSelect(
 				"subgroup_filter",
 				choices = subgroup_choices
+			)
+
+			updateVirtualSelect(
+				"interaction_subgroup_filter",
+				choices = subgroup_choices_inter
 			)
 		})
 
@@ -374,6 +409,36 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			if (input$include_interactions) {
 				# Generate all pairs
 				med_pairs <- combn(medications_to_model, 2, simplify = FALSE)
+
+				min_coprescription_prev <- input$interaction_min_coprescription_prev
+
+
+				showNotification(
+					sprintf("Filtering %d medication pairs by co-prescription prevalence (>= %.1f%%)...",
+									length(med_pairs), min_coprescription_prev),
+					type = "message",
+					duration = 3,
+					id = "filter_notification"
+				)
+
+				med_pairs <- filter_pairs_by_coprescription(
+					med_pairs = med_pairs,
+					min_coprescription_prev = min_coprescription_prev,
+					patient_data = patient_data_filtered,
+					prescriptions = prescriptions_filtered
+				)
+
+				removeNotification("filter_notification")
+
+				if (length(med_pairs) == 0) {
+					showNotification(
+						sprintf("No medication pairs meet the co-prescription prevalence threshold of %.1f%%",
+										min_coprescription_prev),
+						type = "warning",
+						duration = 5
+					)
+					return()
+				}
 
 				showNotification(
 					sprintf("Running interaction models for %d medication pairs...", length(med_pairs)),
@@ -598,6 +663,32 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 		observeEvent(input$run_pp_interaction, {
 			req(filtered_ltcs_r(), patient_data_r(), cases_controls_r(), ltcs_r())
 
+			patient_data_filtered <- patient_data_r()
+			case_controls <- cases_controls_r()
+			ltcs_filtered <- ltcs_r()
+
+			if (isTruthy(input$interaction_subgroup_filter)) {
+				# Parse the subgroup selection (format: "variable#value")
+				subgroup_parts <- strsplit(input$interaction_subgroup_filter, "#")[[1]]
+				subgroup_var <- subgroup_parts[1]
+				subgroup_val <- subgroup_parts[2]
+
+				# Filter patient data
+				patient_data_filtered <- patient_data_filtered[get(subgroup_var) == subgroup_val]
+
+				# Filter prescriptions and LTCs to matching patients
+				filtered_patids <- patient_data_filtered$patid
+				case_controls <- case_controls[patid %in% filtered_patids]
+				ltcs_filtered <- ltcs_filtered[patid %in% filtered_patids]
+
+				showNotification(
+					sprintf("Filtered to subgroup: %s = %s (%d patients)",
+									subgroup_var, subgroup_val, length(filtered_patids)),
+					type = "message",
+					duration = 3
+				)
+			}
+
 			# Get selected medications
 			if (is.null(input$pp_interaction_meds) || length(input$pp_interaction_meds) == 0) {
 				req(recent_presc_freq_data())
@@ -634,9 +725,9 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 				results <- fit_pp_interaction_models(
 					selected_ltcs = selected_ltc_terms,
 					medications = medications_to_model,
-					patient_data = patient_data_r(),
-					recent_prescriptions = cases_controls_r(),
-					ltcs = ltcs_r()
+					patient_data = patient_data_filtered,
+					recent_prescriptions = case_controls,
+					ltcs = ltcs_filtered
 				)
 
 				pp_interaction_results_r(results)

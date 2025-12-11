@@ -17,7 +17,7 @@ module_cca_prevalence_ui <- function(id) {
 						choices = NULL,
 						autoSelectFirstOption = FALSE,
 						search = FALSE,
-						showValueAsTags = TRUE,
+						hideClearButton = FALSE,
 						disableOptionGroupCheckbox = TRUE,
 						multiple = FALSE,
 						dropboxWrapper = "body"
@@ -51,9 +51,9 @@ module_cca_prevalence_ui <- function(id) {
 						choices = NULL,
 						autoSelectFirstOption = FALSE,
 						search = FALSE,
-						showValueAsTags = TRUE,
 						disableOptionGroupCheckbox = TRUE,
 						multiple = FALSE,
+						hideClearButton = FALSE,
 						dropboxWrapper = "body"
 					),
 					reactableOutput(ns("presc_freq_table"), height = "50em")
@@ -85,9 +85,8 @@ module_cca_prevalence_ui <- function(id) {
 						choices = NULL,
 						autoSelectFirstOption = FALSE,
 						search = FALSE,
-						showValueAsTags = TRUE,
 						disableOptionGroupCheckbox = TRUE,
-						multiple = FALSE,
+						hideClearButton = FALSE,
 						dropboxWrapper = "body"
 					),
 					reactableOutput(ns("recent_presc_freq_table"), height = "50em")

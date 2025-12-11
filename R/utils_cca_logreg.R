@@ -942,3 +942,44 @@ add_prevalence_info <- function(result, model_data, med_col) {
 
 	return(result)
 }
+
+#' Filter medication pairs by co-prescription prevalence
+#'
+#' @param med_pairs list of medication pairs
+#' @param min_coprescription_prev minimum co-prescription prevalence threshold
+#' @param patient_data data.table with patid and treatment
+#' @param prescriptions data.table with patid and substance
+#' @return list of medication pairs meeting threshold
+filter_pairs_by_coprescription <- function(med_pairs, min_coprescription_prev,
+																					 patient_data, prescriptions) {
+
+	# Calculate total cases and controls
+	total_cases <- patient_data[treatment == 1, .N]
+	total_controls <- patient_data[treatment == 0, .N]
+
+	# Filter pairs
+	filtered_pairs <- Filter(function(pair) {
+		med1 <- gsub("\\*$", "", pair[1])
+		med2 <- gsub("\\*$", "", pair[2])
+
+		# Get patients with med1
+		patids_med1 <- prescriptions[substance == med1, unique(patid)]
+		# Get patients with med2
+		patids_med2 <- prescriptions[substance == med2, unique(patid)]
+		# Get patients with both
+		patids_both <- bit64::as.integer64(intersect(as.character(patids_med1), as.character(patids_med2)))
+
+		# Calculate prevalence in cases and controls
+		n_cases_both <- patient_data[patid %in% patids_both & treatment == 1, .N]
+		n_controls_both <- patient_data[patid %in% patids_both & treatment == 0, .N]
+
+		pct_cases_both <- 100 * n_cases_both / total_cases
+		pct_controls_both <- 100 * n_controls_both / total_controls
+
+		# Keep pair if EITHER cases or controls meet threshold
+		return(pct_cases_both >= min_coprescription_prev | pct_controls_both >= min_coprescription_prev)
+
+	}, med_pairs)
+
+	return(filtered_pairs)
+}
