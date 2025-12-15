@@ -8,7 +8,7 @@
 #' @param prescriptions data.table with patid, substance, group
 #' @param ltcs data.table with patid, term, group
 #' @return data.table with model results
-run_logistic_models <- function(medications, selected_ltcs,
+run_logistic_models <- function(medications, selected_ltcs, selected_covariates,
 																						patient_data, prescriptions, ltcs) {
 
 	# Strip asterisks from names (added by significance testing)
@@ -29,7 +29,8 @@ run_logistic_models <- function(medications, selected_ltcs,
 		fit_single_logreg_model(
 			model_data = model_data,
 			medication = med,
-			selected_ltcs = selected_ltcs
+			selected_ltcs = selected_ltcs,
+			selected_covariates = selected_covariates
 		)
 	})
 
@@ -47,7 +48,7 @@ run_logistic_models <- function(medications, selected_ltcs,
 #' @param prescriptions data.table with patid, substance, group
 #' @param ltcs data.table with patid, term, group
 #' @return data.table with interaction model results
-run_interaction_models <- function(med_pairs, selected_ltcs,
+run_interaction_models <- function(med_pairs, selected_ltcs, selected_covariates,
 																	 patient_data, prescriptions, ltcs) {
 
 	# Strip asterisks from names
@@ -75,7 +76,8 @@ run_interaction_models <- function(med_pairs, selected_ltcs,
 			model_data = model_data,
 			med1 = med1,
 			med2 = med2,
-			selected_ltcs = selected_ltcs
+			selected_ltcs = selected_ltcs,
+			selected_covariates = selected_covariates
 		)
 	})
 
@@ -92,7 +94,7 @@ run_interaction_models <- function(med_pairs, selected_ltcs,
 #' @param med2 character string of second medication name
 #' @param selected_ltcs character vector of LTC terms
 #' @return data.table with interaction model results INCLUDING main effects and combined effect
-fit_interaction_model <- function(model_data, med1, med2, selected_ltcs) {
+fit_interaction_model <- function(model_data, med1, med2, selected_ltcs, selected_covariates) {
 
 	# Get column names
 	med1_col <- paste0("med_", make.names(med1))
@@ -176,6 +178,10 @@ fit_interaction_model <- function(model_data, med1, med2, selected_ltcs) {
 
 	# Build formula with interaction
 	covariate_terms <- c(med1_col, med2_col, ltc_cols_with_variation)
+	# Add selected covariates if any
+	if (!is.null(selected_covariates) && length(selected_covariates) > 0) {
+		covariate_terms <- c(covariate_terms, selected_covariates)
+	}
 	interaction_term <- paste0(med1_col, ":", med2_col)
 	model_data$group <- factor(model_data$strata)
 	formula_str <- paste0("treatment ~ ", paste(covariate_terms, collapse = " + "),
@@ -383,7 +389,7 @@ prepare_logreg_data <- function(patient_data, prescriptions, ltcs,
 																medications, selected_ltcs) {
 
 	# Start with patient data
-	base_data <- copy(patient_data[, .(patid, treatment, sex, pp_group, mltc_group, strata)])
+	base_data <- copy(patient_data[, .(patid, treatment, eth_group, imd_quintile, sex, pp_group, mltc_group, strata)])
 
 	# Create binary indicators for medications
 	med_indicators <- create_medication_indicators(prescriptions, medications)
@@ -407,6 +413,7 @@ prepare_logreg_data <- function(patient_data, prescriptions, ltcs,
 
 	# Convert factors to ensure proper contrasts
 	model_data[, sex := factor(sex)]
+	model_data[, eth_group := factor(eth_group)]
 	model_data[, pp_group := factor(pp_group)]
 	model_data[, mltc_group := factor(mltc_group)]
 
@@ -495,7 +502,7 @@ create_ltc_indicators_logreg <- function(ltcs, selected_ltcs) {
 #' @param medication character string of medication name
 #' @param selected_ltcs character vector of LTC terms
 #' @return data.table with model results (single row)
-fit_single_logreg_model <- function(model_data, medication, selected_ltcs) {
+fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selected_covariates) {
 
 	# Get column names
 	med_col <- paste0("med_", make.names(medication))
@@ -543,6 +550,10 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs) {
 
 	# Build formula: treatment ~ medication + ltcs + sex + pp_group + mltc_group
 	covariate_terms <- c(med_col, ltc_cols_with_variation)
+	# Add selected covariates if any
+	if (!is.null(selected_covariates) && length(selected_covariates) > 0) {
+		covariate_terms <- c(covariate_terms, selected_covariates)
+	}
 	model_data$group <- factor(model_data$strata)
 	formula_str <- paste0("treatment ~ ", paste(covariate_terms, collapse = " + "), "+ factor(group)")
 
@@ -613,7 +624,7 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs) {
 #' @param recent_prescriptions data.table from cases_controls_r with most recent prescriptions
 #' @param ltcs data.table with LTCs
 #' @return data.table with interaction model results
-fit_pp_interaction_models <- function(selected_ltcs, medications,
+fit_pp_interaction_models <- function(selected_ltcs, selected_covariates, medications,
 																			patient_data, recent_prescriptions, ltcs) {
 
 	# Strip asterisks from LTC names
@@ -633,7 +644,8 @@ fit_pp_interaction_models <- function(selected_ltcs, medications,
 		fit_single_pp_interaction_model(
 			model_data = model_data,
 			medication = med,
-			selected_ltcs = selected_ltcs
+			selected_ltcs = selected_ltcs,
+			selected_covariates = selected_covariates
 		)
 	})
 
@@ -655,7 +667,7 @@ prepare_pp_interaction_data <- function(patient_data, recent_prescriptions, ltcs
 																				medications, selected_ltcs) {
 
 	# Start with patient data - including pp_group
-	base_data <- copy(patient_data[, .(patid, treatment, strata, sex, pp, pp_group)])
+	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp, pp_group)])
 
 	# CRITICAL: Ensure pp_group is an UNORDERED factor
 	# This prevents R from using polynomial contrasts (L, Q, C)
@@ -732,7 +744,7 @@ prepare_pp_interaction_data <- function(patient_data, recent_prescriptions, ltcs
 #' @param medication character medication name
 #' @param selected_ltcs character vector of LTC terms
 #' @return data.table with model results
-fit_single_pp_interaction_model <- function(model_data, medication, selected_ltcs) {
+fit_single_pp_interaction_model <- function(model_data, medication, selected_ltcs, selected_covariates) {
 
 	med_col <- paste0("med_", make.names(medication))
 
@@ -759,6 +771,10 @@ fit_single_pp_interaction_model <- function(model_data, medication, selected_ltc
 	# Build formula with interaction
 	interaction_term <- paste0(med_col, ":pp_group")
 	covariate_terms <- c(med_col, "pp_group", ltc_cols_with_variation)
+	# Add selected covariates if any
+	if (!is.null(selected_covariates) && length(selected_covariates) > 0) {
+		covariate_terms <- c(covariate_terms, selected_covariates)
+	}
 	model_data$group <- factor(model_data$strata)
 
 	formula_str <- paste0("treatment ~ ",
@@ -982,4 +998,344 @@ filter_pairs_by_coprescription <- function(med_pairs, min_coprescription_prev,
 	}, med_pairs)
 
 	return(filtered_pairs)
+}
+
+# R/utils_cca_logreg.R - Add these functions to the existing file
+
+#' Run recent prescription × background medication interaction models
+#'
+#' @param recent_meds character vector of recent prescription names
+#' @param background_meds character vector of background medication names
+#' @param selected_ltcs character vector of LTC terms to include as covariates
+#' @param patient_data data.table with patid, treatment, and demographic info
+#' @param recent_prescriptions data.table from cases_controls_r with most recent prescriptions
+#' @param prescriptions data.table with background prescriptions (patid, substance, group)
+#' @param ltcs data.table with patid, term, group
+#' @return data.table with interaction model results
+run_recent_background_interaction_models <- function(recent_meds, background_meds,
+																										 selected_ltcs, selected_covariates, patient_data,
+																										 recent_prescriptions, prescriptions, ltcs) {
+
+	# Strip asterisks from names
+	recent_meds <- gsub("\\*$", "", recent_meds)
+	background_meds <- gsub("\\*$", "", background_meds)
+	selected_ltcs <- gsub("\\*$", "", selected_ltcs)
+
+	# Prepare the dataset with both recent and background medications
+	model_data <- prepare_recent_background_data(
+		patient_data = patient_data,
+		recent_prescriptions = recent_prescriptions,
+		prescriptions = prescriptions,
+		ltcs = ltcs,
+		recent_meds = recent_meds,
+		background_meds = background_meds,
+		selected_ltcs = selected_ltcs
+	)
+
+	# Create all pairs of recent × background
+	all_pairs <- expand.grid(
+		recent = recent_meds,
+		background = background_meds,
+		stringsAsFactors = FALSE
+	)
+
+	# Fit interaction model for each pair
+	results_list <- lapply(seq_len(nrow(all_pairs)), function(i) {
+		fit_recent_background_interaction_model(
+			model_data = model_data,
+			recent_med = all_pairs$recent[i],
+			background_med = all_pairs$background[i],
+			selected_ltcs = selected_ltcs,
+			selected_covariates = selected_covariates
+		)
+	})
+
+	# Combine results and remove NULL entries
+	results <- rbindlist(results_list[!sapply(results_list, is.null)], fill = TRUE)
+
+	return(results)
+}
+
+#' Prepare data for recent × background interaction models
+#'
+#' @param patient_data data.table with patient characteristics
+#' @param recent_prescriptions data.table with most recent prescriptions (cases_controls_r)
+#' @param prescriptions data.table with background prescriptions
+#' @param ltcs data.table with LTCs
+#' @param recent_meds character vector of recent medications
+#' @param background_meds character vector of background medications
+#' @param selected_ltcs character vector of LTCs to include
+#' @return data.table in wide format ready for modeling
+prepare_recent_background_data <- function(patient_data, recent_prescriptions, prescriptions,
+																					 ltcs, recent_meds, background_meds, selected_ltcs) {
+
+	# Start with patient data
+	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp_group, mltc_group)])
+
+	# Create indicators for RECENT prescriptions
+	recent_filtered <- copy(recent_prescriptions[substance %in% recent_meds, .(patid, substance)])
+	recent_filtered <- unique(recent_filtered)
+
+	if (nrow(recent_filtered) > 0) {
+		recent_wide <- dcast(
+			recent_filtered,
+			patid ~ substance,
+			fun.aggregate = length,
+			value.var = "substance"
+		)
+
+		# Convert to binary and rename with recent_ prefix
+		recent_cols <- setdiff(names(recent_wide), "patid")
+		for (col in recent_cols) {
+			recent_wide[, (col) := as.integer(get(col) > 0)]
+		}
+		setnames(recent_wide, recent_cols, paste0("recent_", make.names(recent_cols)))
+
+		# Merge with base data
+		base_data <- merge(base_data, recent_wide, by = "patid", all.x = TRUE)
+
+		# Fill missing with 0
+		recent_indicator_cols <- grep("^recent_", names(base_data), value = TRUE)
+		for (col in recent_indicator_cols) {
+			base_data[is.na(get(col)), (col) := 0L]
+		}
+	}
+
+	# Create indicators for BACKGROUND medications
+	background_filtered <- copy(prescriptions[substance %in% background_meds, .(patid, substance)])
+	background_filtered <- unique(background_filtered)
+
+	if (nrow(background_filtered) > 0) {
+		background_wide <- dcast(
+			background_filtered,
+			patid ~ substance,
+			fun.aggregate = length,
+			value.var = "substance"
+		)
+
+		# Convert to binary and rename with background_ prefix
+		background_cols <- setdiff(names(background_wide), "patid")
+		for (col in background_cols) {
+			background_wide[, (col) := as.integer(get(col) > 0)]
+		}
+		setnames(background_wide, background_cols, paste0("background_", make.names(background_cols)))
+
+		# Merge with base data
+		base_data <- merge(base_data, background_wide, by = "patid", all.x = TRUE)
+
+		# Fill missing with 0
+		background_indicator_cols <- grep("^background_", names(base_data), value = TRUE)
+		for (col in background_indicator_cols) {
+			base_data[is.na(get(col)), (col) := 0L]
+		}
+	}
+
+	# Create LTC indicators
+	ltc_filtered <- copy(ltcs[term %in% selected_ltcs, .(patid, term)])
+	ltc_filtered <- unique(ltc_filtered)
+
+	if (nrow(ltc_filtered) > 0) {
+		ltc_wide <- dcast(
+			ltc_filtered,
+			patid ~ term,
+			fun.aggregate = length,
+			value.var = "term"
+		)
+
+		ltc_cols <- setdiff(names(ltc_wide), "patid")
+		for (col in ltc_cols) {
+			ltc_wide[, (col) := as.integer(get(col) > 0)]
+		}
+		setnames(ltc_wide, ltc_cols, paste0("ltc_", make.names(ltc_cols)))
+
+		base_data <- merge(base_data, ltc_wide, by = "patid", all.x = TRUE)
+
+		ltc_indicator_cols <- grep("^ltc_", names(base_data), value = TRUE)
+		for (col in ltc_indicator_cols) {
+			base_data[is.na(get(col)), (col) := 0L]
+		}
+	}
+
+	return(base_data)
+}
+
+#' Fit interaction model for recent × background medication pair
+#'
+#' @param model_data data.table prepared for modeling
+#' @param recent_med character string of recent medication name
+#' @param background_med character string of background medication name
+#' @param selected_ltcs character vector of LTC terms
+#' @return data.table with interaction model results
+fit_recent_background_interaction_model <- function(model_data, recent_med,
+																										background_med, selected_ltcs, selected_covariates) {
+
+	# Get column names
+	recent_col <- paste0("recent_", make.names(recent_med))
+	background_col <- paste0("background_", make.names(background_med))
+	ltc_cols <- paste0("ltc_", make.names(selected_ltcs))
+
+	# Check both medications exist
+	if (!recent_col %in% names(model_data) || !background_col %in% names(model_data)) {
+		return(NULL)
+	}
+
+	# Check for variation in both medications
+	if (model_data[, uniqueN(get(recent_col))] < 2 ||
+			model_data[, uniqueN(get(background_col))] < 2) {
+		return(NULL)
+	}
+
+	# Calculate prevalence of both medications together
+	n_cases_both <- model_data[get(recent_col) == 1 & get(background_col) == 1 & treatment == 1, .N]
+	n_controls_both <- model_data[get(recent_col) == 1 & get(background_col) == 1 & treatment == 0, .N]
+	total_cases <- model_data[treatment == 1, .N]
+	total_controls <- model_data[treatment == 0, .N]
+
+	pct_cases_both <- tryCatch(
+		(n_cases_both / total_cases) * 100,
+		error = function(e) NA_real_
+	)
+	pct_controls_both <- tryCatch(
+		(n_controls_both / total_controls) * 100,
+		error = function(e) NA_real_
+	)
+
+	# Keep only LTC columns that exist and have variation
+	existing_ltc_cols <- ltc_cols[ltc_cols %in% names(model_data)]
+	ltc_cols_with_variation <- character(0)
+	for (col in existing_ltc_cols) {
+		if (model_data[, uniqueN(get(col))] > 1) {
+			ltc_cols_with_variation <- c(ltc_cols_with_variation, col)
+		}
+	}
+
+	# Build formula with interaction
+	covariate_terms <- c(recent_col, background_col, ltc_cols_with_variation)
+	# Add selected covariates if any
+	if (!is.null(selected_covariates) && length(selected_covariates) > 0) {
+		covariate_terms <- c(covariate_terms, selected_covariates)
+	}
+	interaction_term <- paste0(recent_col, ":", background_col)
+	model_data$group <- factor(model_data$strata)
+	formula_str <- paste0("treatment ~ ",
+												paste(covariate_terms, collapse = " + "),
+												" + ", interaction_term,
+												" + factor(group)")
+	# Fit model
+	tryCatch({
+		model <- glm(
+			formula = as.formula(formula_str),
+			data = model_data,
+			family = binomial(link = "logit")
+		)
+
+		coef_summary <- summary(model)$coefficients
+
+		message("Coefficients: ", paste(rownames(coef_summary), collapse = ", "))
+
+		# Extract RECENT medication main effect
+		if (recent_col %in% rownames(coef_summary)) {
+			recent_row <- coef_summary[recent_col, , drop = FALSE]
+			recent_or <- exp(recent_row[1, "Estimate"])
+			recent_se <- recent_row[1, "Std. Error"]
+			recent_ci_lower <- exp(recent_row[1, "Estimate"] - 1.96 * recent_se)
+			recent_ci_upper <- exp(recent_row[1, "Estimate"] + 1.96 * recent_se)
+			recent_p <- recent_row[1, "Pr(>|z|)"]
+		} else {
+			recent_or <- NA_real_
+			recent_ci_lower <- NA_real_
+			recent_ci_upper <- NA_real_
+			recent_p <- NA_real_
+		}
+
+		# Extract BACKGROUND medication main effect
+		if (background_col %in% rownames(coef_summary)) {
+			background_row <- coef_summary[background_col, , drop = FALSE]
+			background_or <- exp(background_row[1, "Estimate"])
+			background_se <- background_row[1, "Std. Error"]
+			background_ci_lower <- exp(background_row[1, "Estimate"] - 1.96 * background_se)
+			background_ci_upper <- exp(background_row[1, "Estimate"] + 1.96 * background_se)
+			background_p <- background_row[1, "Pr(>|z|)"]
+		} else {
+			background_or <- NA_real_
+			background_ci_lower <- NA_real_
+			background_ci_upper <- NA_real_
+			background_p <- NA_real_
+		}
+
+		# Extract INTERACTION effect
+		interaction_name <- paste0(recent_col, ":", background_col)
+		if (interaction_name %in% rownames(coef_summary)) {
+			interaction_row <- coef_summary[interaction_name, , drop = FALSE]
+			interaction_or <- exp(interaction_row[1, "Estimate"])
+			interaction_se <- interaction_row[1, "Std. Error"]
+			interaction_ci_lower <- exp(interaction_row[1, "Estimate"] - 1.96 * interaction_se)
+			interaction_ci_upper <- exp(interaction_row[1, "Estimate"] + 1.96 * interaction_se)
+			interaction_p <- interaction_row[1, "Pr(>|z|)"]
+		} else {
+			interaction_or <- NA_real_
+			interaction_ci_lower <- NA_real_
+			interaction_ci_upper <- NA_real_
+			interaction_p <- NA_real_
+		}
+
+		# Calculate COMBINED effect (product of main effects and interaction)
+		combined_or <- recent_or * background_or * interaction_or
+		combined_ci_lower <- recent_ci_lower * background_ci_lower * interaction_ci_lower
+		combined_ci_upper <- recent_ci_upper * background_ci_upper * interaction_ci_upper
+
+		# Return results
+		data.table(
+			recent_med = recent_med,
+			background_med = background_med,
+			recent_OR = recent_or,
+			recent_CI_lower = recent_ci_lower,
+			recent_CI_upper = recent_ci_upper,
+			recent_p = recent_p,
+			background_OR = background_or,
+			background_CI_lower = background_ci_lower,
+			background_CI_upper = background_ci_upper,
+			background_p = background_p,
+			interaction_OR = interaction_or,
+			interaction_CI_lower = interaction_ci_lower,
+			interaction_CI_upper = interaction_ci_upper,
+			interaction_p = interaction_p,
+			combined_OR = combined_or,
+			combined_CI_lower = combined_ci_lower,
+			combined_CI_upper = combined_ci_upper,
+			pct_cases_both = pct_cases_both,
+			pct_controls_both = pct_controls_both,
+			n_cases_both = n_cases_both,
+			n_controls_both = n_controls_both,
+			n_ltc_covariates = length(ltc_cols_with_variation),
+			convergence = "success"
+		)
+
+	}, error = function(e) {
+		data.table(
+			recent_med = recent_med,
+			background_med = background_med,
+			recent_OR = NA_real_,
+			recent_CI_lower = NA_real_,
+			recent_CI_upper = NA_real_,
+			recent_p = NA_real_,
+			background_OR = NA_real_,
+			background_CI_lower = NA_real_,
+			background_CI_upper = NA_real_,
+			background_p = NA_real_,
+			interaction_OR = NA_real_,
+			interaction_CI_lower = NA_real_,
+			interaction_CI_upper = NA_real_,
+			interaction_p = NA_real_,
+			combined_OR = NA_real_,
+			combined_CI_lower = NA_real_,
+			combined_CI_upper = NA_real_,
+			pct_cases_both = pct_cases_both,
+			pct_controls_both = pct_controls_both,
+			n_cases_both = n_cases_both,
+			n_controls_both = n_controls_both,
+			n_ltc_covariates = length(selected_ltcs),
+			convergence = paste("error:", substr(e$message, 1, 50))
+		)
+	})
 }
