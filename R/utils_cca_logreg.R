@@ -389,7 +389,7 @@ prepare_logreg_data <- function(patient_data, prescriptions, ltcs,
 																medications, selected_ltcs) {
 
 	# Start with patient data
-	base_data <- copy(patient_data[, .(patid, treatment, eth_group, imd_quintile, sex, pp_group, mltc_group, strata)])
+	base_data <- copy(patient_data[, .(patid, treatment, eth_group, imd_quintile, sex, pp, pp_group, mltc_group, strata)])
 
 	# Create binary indicators for medications
 	med_indicators <- create_medication_indicators(prescriptions, medications)
@@ -518,6 +518,8 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 			p_value = NA_real_,
 			n_cases = NA_integer_,
 			n_controls = NA_integer_,
+			total_cases = NA_integer_,
+			total_controls = NA_integer_,
 			n_ltc_covariates = length(selected_ltcs),
 			convergence = "medication_not_found"
 		))
@@ -525,6 +527,10 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 
 	# Check for variation in medication
 	if (model_data[, uniqueN(get(med_col))] < 2) {
+
+		total_cases <- model_data[treatment == 1, .N]
+		total_controls <- model_data[treatment == 0, .N]
+
 		return(data.table(
 			medication = medication,
 			OR = NA_real_,
@@ -533,6 +539,8 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 			p_value = NA_real_,
 			n_cases = model_data[get(med_col) == 1 & treatment == 1, .N],
 			n_controls = model_data[get(med_col) == 1 & treatment == 0, .N],
+			total_cases = total_cases,
+			total_controls = total_controls,
 			n_ltc_covariates = length(selected_ltcs),
 			convergence = "no_variation_in_medication"
 		))
@@ -580,6 +588,10 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 		n_cases <- model_data[get(med_col) == 1 & treatment == 1, .N]
 		n_controls <- model_data[get(med_col) == 1 & treatment == 0, .N]
 
+		# Count total cases and controls (for percentage calculation)
+		total_cases <- model_data[treatment == 1, .N]
+		total_controls <- model_data[treatment == 0, .N]
+
 		data.table(
 			medication = medication,
 			OR = or,
@@ -588,6 +600,8 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 			p_value = p_value,
 			n_cases = n_cases,
 			n_controls = n_controls,
+			total_cases = total_cases,
+			total_controls = total_controls,
 			n_ltc_covariates = length(ltc_cols_with_variation),
 			convergence = "success"
 		)
@@ -610,6 +624,8 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 			p_value = NA_real_,
 			n_cases = n_cases_err,
 			n_controls = n_controls_err,
+			total_cases = total_cases,
+			total_controls = total_controls,
 			n_ltc_covariates = length(ltc_cols_with_variation),
 			convergence = paste("error:", substr(e$message, 1, 50))
 		)
@@ -1120,7 +1136,7 @@ prepare_recent_background_data <- function(patient_data, recent_prescriptions, p
 																					 ltcs, recent_meds, background_meds, selected_ltcs, group_recent) {
 
 	# Start with patient data
-	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp_group, mltc_group)])
+	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp, pp_group, mltc_group)])
 
 	# Create indicators for RECENT prescriptions
 	recent_filtered <- copy(recent_prescriptions[substance %in% recent_meds, .(patid, substance)])
@@ -1401,5 +1417,255 @@ fit_recent_background_interaction_model <- function(model_data, recent_med,
 			n_ltc_covariates = length(selected_ltcs),
 			convergence = paste("error:", substr(e$message, 1, 50))
 		)
+	})
+}
+
+
+#' Fit main effects models using most recent prescriptions (no interaction)
+#'
+#' @param selected_ltcs character vector of LTC terms to adjust for
+#' @param selected_covariates character vector of additional covariates
+#' @param medications character vector of medications to model
+#' @param patient_data data.table with patient info
+#' @param recent_prescriptions data.table from cases_controls_r with most recent prescriptions
+#' @param ltcs data.table with LTCs
+#' @param group_medications logical, whether to group medications into single indicator
+#' @return data.table with model results
+fit_recent_main_models <- function(selected_ltcs, selected_covariates, medications,
+																	 patient_data, recent_prescriptions, ltcs, group_medications) {
+
+	# Strip asterisks from LTC names
+	selected_ltcs <- gsub("\\*$", "", selected_ltcs)
+
+	# Prepare base model data with recent prescriptions (without PP group interaction structure)
+	model_data <- prepare_recent_main_data(
+		patient_data = patient_data,
+		recent_prescriptions = recent_prescriptions,
+		ltcs = ltcs,
+		medications = medications,
+		selected_ltcs = selected_ltcs,
+		group_medications = group_medications
+	)
+
+	if (group_medications) {
+		# Run single model for grouped medications
+		result <- fit_single_recent_main_model(
+			model_data = model_data,
+			medication = paste("Grouped:", paste(medications, collapse = ", ")),
+			selected_ltcs = selected_ltcs,
+			selected_covariates = selected_covariates,
+			is_grouped = TRUE
+		)
+
+		return(result)
+	}
+
+	# Fit model for each medication
+	results_list <- lapply(medications, function(med) {
+		fit_single_recent_main_model(
+			model_data = model_data,
+			medication = med,
+			selected_ltcs = selected_ltcs,
+			selected_covariates = selected_covariates,
+			is_grouped = FALSE
+		)
+	})
+
+	# Combine results and remove NULL entries
+	results <- rbindlist(results_list[!sapply(results_list, is.null)], fill = TRUE)
+
+	return(results)
+}
+
+#' Prepare data for recent prescription main effects models (no PP interaction)
+#'
+#' @param patient_data data.table with patient characteristics
+#' @param recent_prescriptions data.table with most recent prescriptions
+#' @param ltcs data.table with LTCs
+#' @param medications character vector of medications
+#' @param selected_ltcs character vector of LTCs to include
+#' @param group_medications logical, whether to group medications
+#' @return data.table in wide format ready for modeling
+prepare_recent_main_data <- function(patient_data, recent_prescriptions, ltcs,
+																		 medications, selected_ltcs, group_medications) {
+
+	# Start with patient data - no need for pp_group here
+	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp, pp_group, mltc_group)])
+
+	# Filter recent_prescriptions to only medications we're modeling
+	recent_presc_filtered <- copy(recent_prescriptions[substance %in% medications, .(patid, substance)])
+
+	# Remove duplicates
+	recent_presc_filtered <- unique(recent_presc_filtered)
+
+	if (group_medications) {
+		# Create single grouped indicator: 1 if patient has ANY of the medications
+		med_grouped <- recent_presc_filtered[, .(med_grouped = 1L), by = patid]
+
+		# Merge with base data
+		base_data <- merge(base_data, med_grouped, by = "patid", all.x = TRUE)
+
+		# Fill missing with 0
+		base_data[is.na(med_grouped), med_grouped := 0L]
+
+	} else {
+		# Create wide format with medication indicators
+		med_wide <- dcast(
+			recent_presc_filtered,
+			patid ~ substance,
+			fun.aggregate = length,
+			value.var = "substance"
+		)
+
+		# Convert counts to binary indicators (0/1)
+		med_cols <- setdiff(names(med_wide), "patid")
+		for (col in med_cols) {
+			med_wide[, (col) := as.integer(get(col) > 0)]
+		}
+
+		# Rename medication columns with med_ prefix
+		setnames(med_wide, med_cols, paste0("med_", make.names(med_cols)))
+
+		# Merge medications with base data
+		base_data <- merge(base_data, med_wide, by = "patid", all.x = TRUE)
+
+		# Fill missing medication indicators with 0
+		med_indicator_cols <- grep("^med_", names(base_data), value = TRUE)
+		for (col in med_indicator_cols) {
+			base_data[is.na(get(col)), (col) := 0L]
+		}
+	}
+
+	# Create LTC indicators - filter to selected LTCs only
+	ltc_filtered <- copy(ltcs[term %in% selected_ltcs, .(patid, term)])
+	ltc_filtered <- unique(ltc_filtered)
+
+	if (nrow(ltc_filtered) > 0) {
+		ltc_wide <- dcast(
+			ltc_filtered,
+			patid ~ term,
+			fun.aggregate = length,
+			value.var = "term"
+		)
+
+		ltc_cols <- setdiff(names(ltc_wide), "patid")
+		for (col in ltc_cols) {
+			ltc_wide[, (col) := as.integer(get(col) > 0)]
+		}
+		setnames(ltc_wide, ltc_cols, paste0("ltc_", make.names(ltc_cols)))
+
+		base_data <- merge(base_data, ltc_wide, by = "patid", all.x = TRUE)
+
+		ltc_indicator_cols <- grep("^ltc_", names(base_data), value = TRUE)
+		for (col in ltc_indicator_cols) {
+			base_data[is.na(get(col)), (col) := 0L]
+		}
+	}
+
+	return(base_data)
+}
+
+#' Fit single recent prescription main effects model
+#'
+#' @param model_data data.table prepared for modeling
+#' @param medication character medication name
+#' @param selected_ltcs character vector of LTC terms
+#' @param selected_covariates character vector of additional covariates
+#' @param is_grouped logical, whether this is a grouped medication indicator
+#' @return data.table with model results
+fit_single_recent_main_model <- function(model_data, medication, selected_ltcs,
+																				 selected_covariates, is_grouped) {
+
+	if (is_grouped) {
+		med_col <- "med_grouped"
+	} else {
+		med_col <- paste0("med_", make.names(medication))
+	}
+
+	# Check medication exists and has variation
+	if (!med_col %in% names(model_data)) {
+		return(NULL)
+	}
+
+	if (model_data[, uniqueN(get(med_col))] < 2) {
+		return(NULL)
+	}
+
+	# Get LTC columns with variation
+	ltc_cols <- paste0("ltc_", make.names(selected_ltcs))
+	ltc_cols <- ltc_cols[ltc_cols %in% names(model_data)]
+	ltc_cols_with_variation <- character(0)
+
+	for (col in ltc_cols) {
+		if (model_data[, uniqueN(get(col))] > 1) {
+			ltc_cols_with_variation <- c(ltc_cols_with_variation, col)
+		}
+	}
+
+	# Build formula: treatment ~ medication + ltcs + covariates + strata
+	covariate_terms <- c(med_col, ltc_cols_with_variation)
+	if (!is.null(selected_covariates) && length(selected_covariates) > 0) {
+		covariate_terms <- c(covariate_terms, selected_covariates)
+	}
+	model_data$group <- factor(model_data$strata)
+
+	formula_str <- paste0("treatment ~ ", paste(covariate_terms, collapse = " + "), " + factor(group)")
+
+	# Fit model
+	tryCatch({
+		model <- glm(
+			formula = as.formula(formula_str),
+			data = model_data,
+			family = binomial(link = "logit")
+		)
+
+		# Extract coefficients
+		coef_summary <- summary(model)$coefficients
+
+		# Get medication effect
+		if (med_col %in% rownames(coef_summary)) {
+			med_row <- coef_summary[med_col, , drop = FALSE]
+			or <- exp(med_row[1, "Estimate"])
+			se <- med_row[1, "Std. Error"]
+			ci_lower <- exp(med_row[1, "Estimate"] - 1.96 * se)
+			ci_upper <- exp(med_row[1, "Estimate"] + 1.96 * se)
+			p_value <- med_row[1, "Pr(>|z|)"]
+		} else {
+			return(NULL)
+		}
+
+		# Calculate prevalence in cases and controls
+		n_cases <- model_data[get(med_col) == 1 & treatment == 1, .N]
+		n_controls <- model_data[get(med_col) == 1 & treatment == 0, .N]
+		total_cases <- model_data[treatment == 1, .N]
+		total_controls <- model_data[treatment == 0, .N]
+
+		pct_cases <- round(100 * n_cases / total_cases, 2)
+		pct_controls <- round(100 * n_controls / total_controls, 2)
+
+		# Create result
+		result <- data.table(
+			medication = medication,
+			OR = or,
+			CI_lower = ci_lower,
+			CI_upper = ci_upper,
+			p_value = p_value,
+			pct_cases = pct_cases,
+			pct_controls = pct_controls,
+			n_cases = n_cases,
+			n_controls = n_controls,
+			total_cases = total_cases,
+			total_controls = total_controls,
+			n_ltc_covariates = length(ltc_cols_with_variation),
+			convergence = "success"
+		)
+
+		# Format OR for display
+		result[, OR_formatted := sprintf("%.2f (%.2f-%.2f)", OR, CI_lower, CI_upper)]
+
+		return(result)
+
+	}, error = function(e) {
+		return(NULL)
 	})
 }
