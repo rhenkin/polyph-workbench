@@ -625,7 +625,7 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 #' @param ltcs data.table with LTCs
 #' @return data.table with interaction model results
 fit_pp_interaction_models <- function(selected_ltcs, selected_covariates, medications,
-																			patient_data, recent_prescriptions, ltcs) {
+																			patient_data, recent_prescriptions, ltcs, group_medications) {
 
 	# Strip asterisks from LTC names
 	selected_ltcs <- gsub("\\*$", "", selected_ltcs)
@@ -636,8 +636,22 @@ fit_pp_interaction_models <- function(selected_ltcs, selected_covariates, medica
 		recent_prescriptions = recent_prescriptions,
 		ltcs = ltcs,
 		medications = medications,
-		selected_ltcs = selected_ltcs
+		selected_ltcs = selected_ltcs,
+		group_medications = group_medications
 	)
+
+	if (group_medications) {
+		# Run single model for grouped medications
+		result <- fit_single_pp_interaction_model(
+			model_data = model_data,
+			medication = paste("Grouped:", paste(medications, collapse = ", ")),
+			selected_ltcs = selected_ltcs,
+			selected_covariates = selected_covariates,
+			is_grouped = TRUE  # NEW: Flag to use different column name
+		)
+
+		return(result)
+	}
 
 	# Fit model for each medication
 	results_list <- lapply(medications, function(med) {
@@ -645,7 +659,8 @@ fit_pp_interaction_models <- function(selected_ltcs, selected_covariates, medica
 			model_data = model_data,
 			medication = med,
 			selected_ltcs = selected_ltcs,
-			selected_covariates = selected_covariates
+			selected_covariates = selected_covariates,
+			is_grouped = FALSE
 		)
 	})
 
@@ -664,10 +679,10 @@ fit_pp_interaction_models <- function(selected_ltcs, selected_covariates, medica
 #' @param selected_ltcs character vector of LTCs to include
 #' @return data.table in wide format ready for modeling
 prepare_pp_interaction_data <- function(patient_data, recent_prescriptions, ltcs,
-																				medications, selected_ltcs) {
+																				medications, selected_ltcs, group_medications) {
 
 	# Start with patient data - including pp_group
-	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp, pp_group)])
+	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp, pp_group, mltc_group)])
 
 	# CRITICAL: Ensure pp_group is an UNORDERED factor
 	# This prevents R from using polynomial contrasts (L, Q, C)
@@ -679,30 +694,42 @@ prepare_pp_interaction_data <- function(patient_data, recent_prescriptions, ltcs
 	# Remove duplicates first
 	recent_presc_filtered <- unique(recent_presc_filtered)
 
-	# Create wide format with medication indicators
-	med_wide <- dcast(
-		recent_presc_filtered,
-		patid ~ substance,
-		fun.aggregate = length,
-		value.var = "substance"
-	)
+	if (group_medications) {
+		# Create single grouped indicator: 1 if patient has ANY of the medications
+		med_grouped <- recent_presc_filtered[, .(med_grouped = 1L), by = patid]
 
-	# Convert counts to binary indicators (0/1)
-	med_cols <- setdiff(names(med_wide), "patid")
-	for (col in med_cols) {
-		med_wide[, (col) := as.integer(get(col) > 0)]
-	}
+		# Merge with base data
+		base_data <- merge(base_data, med_grouped, by = "patid", all.x = TRUE)
 
-	# Rename medication columns with med_ prefix
-	setnames(med_wide, med_cols, paste0("med_", make.names(med_cols)))
+		# Fill missing with 0
+		base_data[is.na(med_grouped), med_grouped := 0L]
 
-	# Merge medications with base data
-	base_data <- merge(base_data, med_wide, by = "patid", all.x = TRUE)
+	} else {
+		# Create wide format with medication indicators
+		med_wide <- dcast(
+			recent_presc_filtered,
+			patid ~ substance,
+			fun.aggregate = length,
+			value.var = "substance"
+		)
 
-	# Fill missing medication indicators with 0
-	med_indicator_cols <- grep("^med_", names(base_data), value = TRUE)
-	for (col in med_indicator_cols) {
-		base_data[is.na(get(col)), (col) := 0L]
+		# Convert counts to binary indicators (0/1)
+		med_cols <- setdiff(names(med_wide), "patid")
+		for (col in med_cols) {
+			med_wide[, (col) := as.integer(get(col) > 0)]
+		}
+
+		# Rename medication columns with med_ prefix
+		setnames(med_wide, med_cols, paste0("med_", make.names(med_cols)))
+
+		# Merge medications with base data
+		base_data <- merge(base_data, med_wide, by = "patid", all.x = TRUE)
+
+		# Fill missing medication indicators with 0
+		med_indicator_cols <- grep("^med_", names(base_data), value = TRUE)
+		for (col in med_indicator_cols) {
+			base_data[is.na(get(col)), (col) := 0L]
+		}
 	}
 
 	# Create LTC indicators - filter to selected LTCs only
@@ -744,9 +771,13 @@ prepare_pp_interaction_data <- function(patient_data, recent_prescriptions, ltcs
 #' @param medication character medication name
 #' @param selected_ltcs character vector of LTC terms
 #' @return data.table with model results
-fit_single_pp_interaction_model <- function(model_data, medication, selected_ltcs, selected_covariates) {
+fit_single_pp_interaction_model <- function(model_data, medication, selected_ltcs, selected_covariates, is_grouped) {
 
-	med_col <- paste0("med_", make.names(medication))
+	if (is_grouped) {
+		med_col <- "med_grouped"
+	} else {
+		med_col <- paste0("med_", make.names(medication))
+	}
 
 	# Check medication exists and has variation
 	if (!med_col %in% names(model_data)) {
@@ -790,6 +821,7 @@ fit_single_pp_interaction_model <- function(model_data, medication, selected_ltc
 			family = binomial(link = "logit")
 		)
 
+
 		# Extract coefficients
 		coef_summary <- summary(model)$coefficients
 
@@ -832,6 +864,7 @@ fit_single_pp_interaction_model <- function(model_data, medication, selected_ltc
 		return(result)
 
 	}, error = function(e) {
+		message("Error running models: ", e$message)
 		data.table(
 			medication = medication,
 			pp_level = NA_character_,
@@ -950,8 +983,8 @@ add_prevalence_info <- function(result, model_data, med_col) {
 	n_controls <- model_data[get(med_col) == 1 & treatment == 0, .N]
 
 	result[, `:=`(
-		pct_cases = round(100 * n_cases / total_cases, 2),
-		pct_controls = round(100 * n_controls / total_controls, 2),
+		case_prev = round(100 * n_cases / total_cases, 2),
+		control_prev = round(100 * n_controls / total_controls, 2),
 		n_cases = n_cases,
 		n_controls = n_controls
 	)]
@@ -1014,7 +1047,8 @@ filter_pairs_by_coprescription <- function(med_pairs, min_coprescription_prev,
 #' @return data.table with interaction model results
 run_recent_background_interaction_models <- function(recent_meds, background_meds,
 																										 selected_ltcs, selected_covariates, patient_data,
-																										 recent_prescriptions, prescriptions, ltcs) {
+																										 recent_prescriptions, prescriptions, ltcs,
+																										 group_recent) {
 
 	# Strip asterisks from names
 	recent_meds <- gsub("\\*$", "", recent_meds)
@@ -1029,26 +1063,42 @@ run_recent_background_interaction_models <- function(recent_meds, background_med
 		ltcs = ltcs,
 		recent_meds = recent_meds,
 		background_meds = background_meds,
-		selected_ltcs = selected_ltcs
+		selected_ltcs = selected_ltcs,
+		group_recent = group_recent
 	)
 
-	# Create all pairs of recent × background
-	all_pairs <- expand.grid(
-		recent = recent_meds,
-		background = background_meds,
-		stringsAsFactors = FALSE
-	)
-
-	# Fit interaction model for each pair
-	results_list <- lapply(seq_len(nrow(all_pairs)), function(i) {
-		fit_recent_background_interaction_model(
-			model_data = model_data,
-			recent_med = all_pairs$recent[i],
-			background_med = all_pairs$background[i],
-			selected_ltcs = selected_ltcs,
-			selected_covariates = selected_covariates
+	if (group_recent) {
+		# Run models for grouped recent × each background medication
+		results_list <- lapply(background_meds, function(bg_med) {
+			fit_recent_background_interaction_model(
+				model_data = model_data,
+				recent_med = paste("Grouped:", paste(recent_meds, collapse = ", ")),
+				background_med = bg_med,
+				selected_ltcs = selected_ltcs,
+				selected_covariates = selected_covariates,
+				recent_is_grouped = TRUE  # NEW: Flag for grouped recent
+			)
+		})
+	} else {
+		# Create all pairs of recent × background
+		all_pairs <- expand.grid(
+			recent = recent_meds,
+			background = background_meds,
+			stringsAsFactors = FALSE
 		)
-	})
+
+		# Fit interaction model for each pair
+		results_list <- lapply(seq_len(nrow(all_pairs)), function(i) {
+			fit_recent_background_interaction_model(
+				model_data = model_data,
+				recent_med = all_pairs$recent[i],
+				background_med = all_pairs$background[i],
+				selected_ltcs = selected_ltcs,
+				selected_covariates = selected_covariates,
+				FALSE
+			)
+		})
+	}
 
 	# Combine results and remove NULL entries
 	results <- rbindlist(results_list[!sapply(results_list, is.null)], fill = TRUE)
@@ -1067,7 +1117,7 @@ run_recent_background_interaction_models <- function(recent_meds, background_med
 #' @param selected_ltcs character vector of LTCs to include
 #' @return data.table in wide format ready for modeling
 prepare_recent_background_data <- function(patient_data, recent_prescriptions, prescriptions,
-																					 ltcs, recent_meds, background_meds, selected_ltcs) {
+																					 ltcs, recent_meds, background_meds, selected_ltcs, group_recent) {
 
 	# Start with patient data
 	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp_group, mltc_group)])
@@ -1077,27 +1127,39 @@ prepare_recent_background_data <- function(patient_data, recent_prescriptions, p
 	recent_filtered <- unique(recent_filtered)
 
 	if (nrow(recent_filtered) > 0) {
-		recent_wide <- dcast(
-			recent_filtered,
-			patid ~ substance,
-			fun.aggregate = length,
-			value.var = "substance"
-		)
+		if (group_recent) {
+			# NEW: Create single grouped indicator: 1 if patient has ANY of the recent medications
+			recent_grouped <- recent_filtered[, .(recent_grouped = 1L), by = patid]
 
-		# Convert to binary and rename with recent_ prefix
-		recent_cols <- setdiff(names(recent_wide), "patid")
-		for (col in recent_cols) {
-			recent_wide[, (col) := as.integer(get(col) > 0)]
-		}
-		setnames(recent_wide, recent_cols, paste0("recent_", make.names(recent_cols)))
+			# Merge with base data
+			base_data <- merge(base_data, recent_grouped, by = "patid", all.x = TRUE)
 
-		# Merge with base data
-		base_data <- merge(base_data, recent_wide, by = "patid", all.x = TRUE)
+			# Fill missing with 0
+			base_data[is.na(recent_grouped), recent_grouped := 0L]
 
-		# Fill missing with 0
-		recent_indicator_cols <- grep("^recent_", names(base_data), value = TRUE)
-		for (col in recent_indicator_cols) {
-			base_data[is.na(get(col)), (col) := 0L]
+		} else {
+			recent_wide <- dcast(
+				recent_filtered,
+				patid ~ substance,
+				fun.aggregate = length,
+				value.var = "substance"
+			)
+
+			# Convert to binary and rename with recent_ prefix
+			recent_cols <- setdiff(names(recent_wide), "patid")
+			for (col in recent_cols) {
+				recent_wide[, (col) := as.integer(get(col) > 0)]
+			}
+			setnames(recent_wide, recent_cols, paste0("recent_", make.names(recent_cols)))
+
+			# Merge with base data
+			base_data <- merge(base_data, recent_wide, by = "patid", all.x = TRUE)
+
+			# Fill missing with 0
+			recent_indicator_cols <- grep("^recent_", names(base_data), value = TRUE)
+			for (col in recent_indicator_cols) {
+				base_data[is.na(get(col)), (col) := 0L]
+			}
 		}
 	}
 
@@ -1167,10 +1229,14 @@ prepare_recent_background_data <- function(patient_data, recent_prescriptions, p
 #' @param selected_ltcs character vector of LTC terms
 #' @return data.table with interaction model results
 fit_recent_background_interaction_model <- function(model_data, recent_med,
-																										background_med, selected_ltcs, selected_covariates) {
+																										background_med, selected_ltcs, selected_covariates, recent_is_grouped) {
 
 	# Get column names
-	recent_col <- paste0("recent_", make.names(recent_med))
+	if (recent_is_grouped) {
+		recent_col <- "recent_grouped"
+	} else {
+		recent_col <- paste0("recent_", make.names(recent_med))
+	}
 	background_col <- paste0("background_", make.names(background_med))
 	ltc_cols <- paste0("ltc_", make.names(selected_ltcs))
 
@@ -1230,8 +1296,6 @@ fit_recent_background_interaction_model <- function(model_data, recent_med,
 		)
 
 		coef_summary <- summary(model)$coefficients
-
-		message("Coefficients: ", paste(rownames(coef_summary), collapse = ", "))
 
 		# Extract RECENT medication main effect
 		if (recent_col %in% rownames(coef_summary)) {

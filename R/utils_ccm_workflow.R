@@ -91,7 +91,6 @@ build_cases_table <- function(outcome_prescriptions,
 															patient_data,
 															pred_window,
 															patient_filters) {
-	browser()
 	# Get case patient IDs and outcome dates
 	outcomes <- outcome_prescriptions[, .(patid, outcome_date = eventdate)] |> unique()
 	case_patids <- unique(outcomes$patid)

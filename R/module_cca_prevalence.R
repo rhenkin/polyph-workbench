@@ -489,10 +489,32 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 
 			output$recent_bg_presc_dropdown_ui <- renderUI({
 				req(prescriptions_r())
+
+				unique_substances <- sort(unique(prescriptions_r()$substance))
+
+				if (bnf_level == "BNF_Chapter") {
+					choices <- sort(unique_substances)
+				} else if (bnf_level == "BNF_Section") {
+					lookup_data <- bnf_lookup[BNF_Section %in% unique_substances,
+																		.(BNF_Section, BNF_Chapter)] |> unique()
+					lookup_data <- lookup_data[order(BNF_Chapter, BNF_Section)]
+					choices <- with(lookup_data, split(BNF_Section, BNF_Chapter))
+				} else if (bnf_level == "BNF_Paragraph") {
+					lookup_data <- bnf_lookup[BNF_Paragraph %in% unique_substances,
+																		.(BNF_Paragraph, BNF_Section)] |> unique()
+					lookup_data <- lookup_data[order(BNF_Section, BNF_Paragraph)]
+					choices <- with(lookup_data, split(BNF_Paragraph, BNF_Section))
+				} else {  # BNF_Chemical_Substance
+					lookup_data <- bnf_lookup[BNF_Chemical_Substance %in% unique_substances,
+																		.(BNF_Chemical_Substance, BNF_Paragraph)] |> unique()
+					lookup_data <- lookup_data[order(BNF_Paragraph, BNF_Chemical_Substance)]
+					choices <- with(lookup_data, split(BNF_Chemical_Substance, BNF_Paragraph))
+				}
+
 				virtualSelectInput(
 					ns("recent_bg_presc_dropdown"),
 					label = "Filter by background prescriptions:",
-					choices = sort(unique(prescriptions_r()$substance)),
+					choices = choices,
 					multiple = TRUE,
 					search = TRUE
 				)
@@ -501,16 +523,22 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 			# Recent prescriptions by LTC and background prescription filter
 			output$recent_by_ltc_and_presc <- renderReactable({
 				req(cases_controls_r())
-				req(input$recent_ltc_dropdown, input$recent_bg_presc_dropdown)
+				req(isTruthy(input$recent_ltc_dropdown) | isTruthy(input$recent_bg_presc_dropdown))
 
 				# Filter patients by LTC
-				ltc_patids <- unique(ltcs_r()[term %in% input$recent_ltc_dropdown, patid])
+				if (isTruthy(input$recent_ltc_dropdown)) {
+					ltc_patids <- unique(ltcs_r()[term %in% input$recent_ltc_dropdown, patid])
+				} else ltc_patids <- unique(ltcs_r()$patid)
+
 
 				# Filter patients by background prescription
-				bg_presc_patids <- unique(prescriptions_r()[substance %in% input$recent_bg_presc_dropdown, patid])
+				if (isTruthy(input$recent_bg_presc_dropdown)) {
+					bg_presc_patids <- unique(prescriptions_r()[substance %in% input$recent_bg_presc_dropdown, patid])
+				} else bg_presc_patids <- unique(prescriptions_r()$patid)
+
 
 				# Get intersection
-				filtered_patids <- intersect(ltc_patids, bg_presc_patids)
+				filtered_patids <- bit64::as.integer64(intersect(as.character(ltc_patids), as.character(bg_presc_patids)))
 
 				# Filter recent prescriptions to these patients
 				recent_presc_filtered <- merge(

@@ -168,6 +168,24 @@ module_cca_logreg_ui <- function(id) {
 					)
 				),
 
+				conditionalPanel(
+					condition = "input.model_type == 'recent_pp' || input.model_type == 'recent_background'",
+					ns = ns,
+					checkboxInput(
+						ns("group_recent_meds"),
+						"Group all selected recent prescriptions into a single indicator variable",
+						value = FALSE
+					),
+					div(
+						class = "alert alert-info",
+						style = "margin-top: 5px; margin-bottom: 10px;",
+						tags$small(
+							"When checked, a single model will be run testing 'any of the selected medications' ",
+							"instead of separate models for each medication."
+						)
+					)
+				),
+
 				# Subgroup filter (optional, for all models)
 				virtualSelectInput(
 					ns("subgroup_filter"),
@@ -544,7 +562,8 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 							medications = input$selected_recent_rx,
 							patient_data = patient_data_filtered,
 							recent_prescriptions = case_controls,
-							ltcs = ltcs_filtered
+							ltcs = ltcs_filtered,
+							group_medications = input$group_recent_meds
 						)
 					},
 
@@ -566,7 +585,8 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 							patient_data = patient_data_filtered,
 							recent_prescriptions = case_controls,
 							prescriptions = prescriptions_filtered,
-							ltcs = ltcs_filtered
+							ltcs = ltcs_filtered,
+							group_recent = input$group_recent_meds
 						)
 					}
 				)
@@ -686,8 +706,8 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 				defaultPageSize = 20,
 				searchable = TRUE,
 				showPageSizeOptions = TRUE,
-				compact = TRUE,
-				groupBy = "medication"
+				compact = TRUE
+				# groupBy = "medication"
 			)
 		})
 
