@@ -389,7 +389,7 @@ prepare_logreg_data <- function(patient_data, prescriptions, ltcs,
 																medications, selected_ltcs) {
 
 	# Start with patient data
-	base_data <- copy(patient_data[, .(patid, treatment, eth_group, imd_quintile, sex, pp, pp_group, mltc_group, strata)])
+	base_data <- copy(patient_data[, .(patid, treatment, eth_group, imd_quintile, sex, pp, pp_group, n_ltc, mltc_group, strata)])
 
 	# Create binary indicators for medications
 	med_indicators <- create_medication_indicators(prescriptions, medications)
@@ -698,7 +698,7 @@ prepare_pp_interaction_data <- function(patient_data, recent_prescriptions, ltcs
 																				medications, selected_ltcs, group_medications) {
 
 	# Start with patient data - including pp_group
-	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp, pp_group, mltc_group)])
+	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp, pp_group, n_ltc, mltc_group)])
 
 	# CRITICAL: Ensure pp_group is an UNORDERED factor
 	# This prevents R from using polynomial contrasts (L, Q, C)
@@ -1136,7 +1136,7 @@ prepare_recent_background_data <- function(patient_data, recent_prescriptions, p
 																					 ltcs, recent_meds, background_meds, selected_ltcs, group_recent) {
 
 	# Start with patient data
-	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp, pp_group, mltc_group)])
+	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp, pp_group, n_ltc, mltc_group)])
 
 	# Create indicators for RECENT prescriptions
 	recent_filtered <- copy(recent_prescriptions[substance %in% recent_meds, .(patid, substance)])
@@ -1490,7 +1490,7 @@ prepare_recent_main_data <- function(patient_data, recent_prescriptions, ltcs,
 																		 medications, selected_ltcs, group_medications) {
 
 	# Start with patient data - no need for pp_group here
-	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp, pp_group, mltc_group)])
+	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile, sex, pp, pp_group, n_ltc, mltc_group)])
 
 	# Filter recent_prescriptions to only medications we're modeling
 	recent_presc_filtered <- copy(recent_prescriptions[substance %in% medications, .(patid, substance)])

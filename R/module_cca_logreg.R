@@ -67,6 +67,7 @@ module_cca_logreg_ui <- function(id) {
 						"IMD Quintiles" = "imd_quintile",
 						"Polypharmacy burden (numeric)" = "pp",
 						"Polypharmacy burden group" = "pp_group",
+						"MLTC burden (numeric)" = "n_ltc",
 						"MLTC burden group" = "mltc_group"
 					),
 					selected = NULL
@@ -267,7 +268,7 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			filtered <- ltc_data[
 				case >= input$ltc_min_prev &
 					control >= input$ltc_min_prev &
-					OR >= input$ltc_min_or &
+					(OR >= input$ltc_min_or | OR < 1/input$ltc_min_or) &
 					!is.na(OR)
 			]
 
