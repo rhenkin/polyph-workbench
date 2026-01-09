@@ -22,6 +22,8 @@ module_cca_prevalence_ui <- function(id) {
 						multiple = FALSE,
 						dropboxWrapper = "body"
 					),
+					downloadButton(ns("download_ltc_freq"), "Download Table", class = "btn-sm btn-secondary"),
+					br(), br(),
 					reactableOutput(ns("ltc_freq_table"), height = "50em")
 				),
 				nav_panel(
@@ -32,6 +34,8 @@ module_cca_prevalence_ui <- function(id) {
 						div("Select medications to show the prevalence difference only among the patients taking those medications."),
 						div("Table contains conditions with a minimum of 1% prevalence in both cases and controls"),
 						uiOutput(ns("presc_dropdown_ui")),
+						downloadButton(ns("download_ltc_by_presc"), "Download Table", class = "btn-sm btn-secondary"),
+						br(), br(),
 						reactableOutput(ns("ltc_by_presc"), height = "50em")
 					)
 				)
@@ -56,6 +60,8 @@ module_cca_prevalence_ui <- function(id) {
 						hideClearButton = FALSE,
 						dropboxWrapper = "body"
 					),
+					downloadButton(ns("download_presc_freq"), "Download Table", class = "btn-sm btn-secondary"),
+					br(), br(),
 					reactableOutput(ns("presc_freq_table"), height = "50em")
 				),
 				nav_panel(
@@ -66,6 +72,8 @@ module_cca_prevalence_ui <- function(id) {
 						div("Select conditions to show the prevalence difference only among the patients that were diagnosed with those conditions."),
 						div("Table contains medications with a minimum of 1% prevalence in both cases and controls"),
 						uiOutput(ns("ltc_dropdown_ui")),
+						downloadButton(ns("download_presc_by_ltc"), "Download Table", class = "btn-sm btn-secondary"),
+						br(), br(),
 						reactableOutput(ns("presc_by_ltc"), height = "50em")
 					)
 				)
@@ -89,6 +97,8 @@ module_cca_prevalence_ui <- function(id) {
 						hideClearButton = FALSE,
 						dropboxWrapper = "body"
 					),
+					downloadButton(ns("download_recent_presc_freq"), "Download Table", class = "btn-sm btn-secondary"),
+					br(), br(),
 					reactableOutput(ns("recent_presc_freq_table"), height = "50em")
 				),
 				nav_panel(
@@ -106,6 +116,8 @@ module_cca_prevalence_ui <- function(id) {
 										 uiOutput(ns("recent_bg_presc_dropdown_ui"))
 							)
 						),
+						downloadButton(ns("download_recent_by_filters"), "Download Table", class = "btn-sm btn-secondary"),
+						br(), br(),
 						reactableOutput(ns("recent_by_ltc_and_presc"), height = "50em")
 					)
 				)
@@ -134,6 +146,14 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 		# LTC PREVALENCE TABLES
 		# ============================================================================
 
+		# Store rendered table data
+		ltc_freq_table_data <- reactiveVal(NULL)
+		ltc_by_presc_table_data <- reactiveVal(NULL)
+		presc_freq_table_data <- reactiveVal(NULL)
+		presc_by_ltc_table_data <- reactiveVal(NULL)
+		recent_presc_freq_table_data <- reactiveVal(NULL)
+		recent_by_filters_table_data <- reactiveVal(NULL)
+
 		# LTC frequency with optional stratification
 		ltc_freq_df <- reactive({
 			req(ltcs_r())
@@ -161,6 +181,8 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 				"term",
 				data_with_group = ltcs_filtered
 			)
+
+			ltc_freq_table_data(result_table)
 
 			# Add formatted OR column
 			result_table <- add_or_formatted_column(result_table)
@@ -244,6 +266,8 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 
 			validate(need(!is.null(result_table), "No results found for filter"))
 
+			ltc_by_presc_table_data(result_table)
+
 			# Add formatted OR column
 			result_table <- add_or_formatted_column(result_table)
 
@@ -306,6 +330,8 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 				data_with_group = presc_filtered
 			)
 
+			presc_freq_table_data(result_table)
+
 			# Add formatted OR column
 			result_table <- add_or_formatted_column(result_table)
 
@@ -365,6 +391,8 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 			)
 
 			validate(need(!is.null(result_table), "No results found for filter"))
+
+			presc_by_ltc_table_data(result_table)
 
 			# Add formatted OR column
 			result_table <- add_or_formatted_column(result_table)
@@ -444,6 +472,8 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 					"substance",
 					data_with_group = recent_presc_filtered
 				)
+
+				recent_presc_freq_table_data(result_table)
 
 				# Add formatted OR column
 				result_table <- add_or_formatted_column(result_table)
@@ -561,6 +591,8 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 				validate(need(!is.null(result_table) && nrow(result_table) > 0,
 											"No results found for the selected filters"))
 
+				recent_by_filters_table_data(result_table)
+
 				# Add formatted OR column
 				result_table <- add_or_formatted_column(result_table)
 
@@ -590,6 +622,90 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 					get_standard_reactable_config()
 				))
 			})
+		}
+
+		# ============================================================================
+		# DOWNLOAD HANDLERS
+		# ============================================================================
+
+		output$download_ltc_freq <- downloadHandler(
+			filename = function() {
+				strat_suffix <- if (!is.null(input$ltc_freq_strat_variable) &&
+														input$ltc_freq_strat_variable != "all") {
+					paste0("_", gsub(" ", "_", input$ltc_freq_strat_variable))
+				} else {
+					""
+				}
+				paste0("ltc_prevalence", strat_suffix, "_", Sys.Date(), ".csv")
+			},
+			content = function(file) {
+				req(ltc_freq_table_data())
+				fwrite(ltc_freq_table_data(), file)
+			}
+		)
+
+		output$download_ltc_by_presc <- downloadHandler(
+			filename = function() {
+				paste0("ltc_by_prescription_", Sys.Date(), ".csv")
+			},
+			content = function(file) {
+				req(ltc_by_presc_table_data())
+				fwrite(ltc_by_presc_table_data(), file)
+			}
+		)
+
+		output$download_presc_freq <- downloadHandler(
+			filename = function() {
+				strat_suffix <- if (!is.null(input$presc_freq_strat_variable) &&
+														input$presc_freq_strat_variable != "all") {
+					paste0("_", gsub(" ", "_", input$presc_freq_strat_variable))
+				} else {
+					""
+				}
+				paste0("prescription_prevalence", strat_suffix, "_", Sys.Date(), ".csv")
+			},
+			content = function(file) {
+				req(presc_freq_table_data())
+				fwrite(presc_freq_table_data(), file)
+			}
+		)
+
+		output$download_presc_by_ltc <- downloadHandler(
+			filename = function() {
+				paste0("prescription_by_ltc_", Sys.Date(), ".csv")
+			},
+			content = function(file) {
+				req(presc_by_ltc_table_data())
+				fwrite(presc_by_ltc_table_data(), file)
+			}
+		)
+
+		if (!is.null(cases_controls_r)) {
+			output$download_recent_presc_freq <- downloadHandler(
+				filename = function() {
+					strat_suffix <- if (!is.null(input$recent_presc_freq_strat_variable) &&
+															input$recent_presc_freq_strat_variable != "all") {
+						paste0("_", gsub(" ", "_", input$recent_presc_freq_strat_variable))
+					} else {
+						""
+					}
+					paste0("recent_prescription_prevalence", strat_suffix, "_", Sys.Date(), ".csv")
+				},
+				content = function(file) {
+					req(recent_presc_freq_table_data())
+					fwrite(recent_presc_freq_table_data(), file)
+				}
+			)
+
+			output$download_recent_by_filters <- downloadHandler(
+				filename = function() {
+					paste0("recent_prescription_by_filters_", Sys.Date(), ".csv")
+				},
+				content = function(file) {
+					req(recent_by_filters_table_data())
+					fwrite(recent_by_filters_table_data(), file)
+				}
+			)
 		}
 	})
 }
