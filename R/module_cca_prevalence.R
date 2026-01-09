@@ -33,7 +33,16 @@ module_cca_prevalence_ui <- function(id) {
 						height = "60em",
 						div("Select medications to show the prevalence difference only among the patients taking those medications."),
 						div("Table contains conditions with a minimum of 1% prevalence in both cases and controls"),
-						uiOutput(ns("presc_dropdown_ui")),
+						fluidRow(
+							column(6,
+										 div(strong("Filter by background (continuous) prescriptions:")),
+										 uiOutput(ns("presc_dropdown_ui"))
+							),
+							column(6,
+										 div(strong("Filter by recent prescriptions (optional):")),
+										 uiOutput(ns("ltc_by_presc_recent_dropdown_ui"))
+							)
+						),
 						downloadButton(ns("download_ltc_by_presc"), "Download Table", class = "btn-sm btn-secondary"),
 						br(), br(),
 						reactableOutput(ns("ltc_by_presc"), height = "50em")
@@ -71,7 +80,16 @@ module_cca_prevalence_ui <- function(id) {
 						height = "60em",
 						div("Select conditions to show the prevalence difference only among the patients that were diagnosed with those conditions."),
 						div("Table contains medications with a minimum of 1% prevalence in both cases and controls"),
-						uiOutput(ns("ltc_dropdown_ui")),
+						fluidRow(
+							column(6,
+										 div(strong("Filter by LTCs:")),
+										 uiOutput(ns("ltc_dropdown_ui"))
+							),
+							column(6,
+										 div(strong("Filter by recent prescriptions (optional):")),
+										 uiOutput(ns("presc_by_ltc_recent_dropdown_ui"))
+							)
+						),
 						downloadButton(ns("download_presc_by_ltc"), "Download Table", class = "btn-sm btn-secondary"),
 						br(), br(),
 						reactableOutput(ns("presc_by_ltc"), height = "50em")
@@ -140,6 +158,38 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 			if (!is.null(cases_controls_r)) {
 				updateVirtualSelect("recent_presc_freq_strat_variable", choices = choices)
 			}
+		})
+
+		# Recent prescription dropdown for LTC by prescription table
+		output$ltc_by_presc_recent_dropdown_ui <- renderUI({
+			if (is.null(cases_controls_r)) return(NULL)
+			req(cases_controls_r())
+
+			unique_substances <- sort(unique(cases_controls_r()$substance))
+
+			virtualSelectInput(
+				ns("ltc_by_presc_recent_dropdown"),
+				label = "Select recent prescriptions:",
+				choices = unique_substances,
+				multiple = TRUE,
+				search = TRUE
+			)
+		})
+
+		# Recent prescription dropdown for prescription by LTC table
+		output$presc_by_ltc_recent_dropdown_ui <- renderUI({
+			if (is.null(cases_controls_r)) return(NULL)
+			req(cases_controls_r())
+
+			unique_substances <- sort(unique(cases_controls_r()$substance))
+
+			virtualSelectInput(
+				ns("presc_by_ltc_recent_dropdown"),
+				label = "Select recent prescriptions:",
+				choices = unique_substances,
+				multiple = TRUE,
+				search = TRUE
+			)
 		})
 
 		# ============================================================================
@@ -248,23 +298,48 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 				label = "Select 1 or more substances:",
 				choices = choices,
 				multiple = TRUE,
-				search = TRUE
+				search = TRUE,
+				showSelectedOptionsFirst = TRUE
 			)
 		})
 
 		# LTC by prescription table
-		output$ltc_by_presc <- renderReactable({
-			req(ltcs_r(), input$presc_dropdown)
 
-			result_table <- calculate_prevalence_cca(
-				ltcs_r(),
-				prescriptions_r(),
-				input$presc_dropdown,
-				"substance",
-				"term"
+		output$ltc_by_presc <- renderReactable({
+			req(ltcs_r())
+
+			# Need at least one filter selected
+			req(isTruthy(input$presc_dropdown) | isTruthy(input$ltc_by_presc_recent_dropdown))
+
+			# Start with all patients
+			filtered_patids <- unique(ltcs_r()$patid)
+
+			# Filter by background prescriptions if selected
+			if (isTruthy(input$presc_dropdown)) {
+				bg_presc_patids <- unique(prescriptions_r()[substance %in% input$presc_dropdown, patid])
+				filtered_patids <- bit64::as.integer64(intersect(as.character(filtered_patids), as.character(bg_presc_patids)))
+			}
+
+			# Filter by recent prescriptions if selected
+			if (!is.null(cases_controls_r) && isTruthy(input$ltc_by_presc_recent_dropdown)) {
+				recent_presc_patids <- unique(cases_controls_r()[substance %in% input$ltc_by_presc_recent_dropdown, patid])
+				filtered_patids <- bit64::as.integer64(intersect(as.character(filtered_patids), as.character(recent_presc_patids)))
+			}
+
+			# Filter LTCs to these patients
+			ltcs_filtered <- ltcs_r()[patid %in% filtered_patids]
+
+			# Calculate frequency stats (this function needs group, strata, and term columns)
+			freq_stats <- calculate_frequency_stats(ltcs_filtered, "term")
+
+			# Create prevalence ratio table
+			result_table <- create_prevalence_ratio_table(
+				freq_stats,
+				"term",
+				data_with_group = ltcs_filtered
 			)
 
-			validate(need(!is.null(result_table), "No results found for filter"))
+			validate(need(nrow(result_table) > 0, "No results found for filter"))
 
 			ltc_by_presc_table_data(result_table)
 
@@ -380,17 +455,40 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 
 		# Prescription by LTC table
 		output$presc_by_ltc <- renderReactable({
-			req(prescriptions_r(), input$ltc_dropdown)
+			req(prescriptions_r())
 
-			result_table <- calculate_prevalence_cca(
-				prescriptions_r(),
-				ltcs_r(),
-				input$ltc_dropdown,
-				"term",
-				"substance"
+			# Need at least one filter selected
+			req(isTruthy(input$ltc_dropdown) | isTruthy(input$presc_by_ltc_recent_dropdown))
+
+			# Start with all patients
+			filtered_patids <- unique(prescriptions_r()$patid)
+
+			# Filter by LTCs if selected
+			if (isTruthy(input$ltc_dropdown)) {
+				ltc_patids <- unique(ltcs_r()[term %in% input$ltc_dropdown, patid])
+				filtered_patids <- bit64::as.integer64(intersect(as.character(filtered_patids), as.character(ltc_patids)))
+			}
+
+			# Filter by recent prescriptions if selected
+			if (!is.null(cases_controls_r) && isTruthy(input$presc_by_ltc_recent_dropdown)) {
+				recent_presc_patids <- unique(cases_controls_r()[substance %in% input$presc_by_ltc_recent_dropdown, patid])
+				filtered_patids <- bit64::as.integer64(intersect(as.character(filtered_patids), as.character(recent_presc_patids)))
+			}
+
+			# Filter prescriptions to these patients
+			presc_filtered <- prescriptions_r()[patid %in% filtered_patids]
+
+			# Calculate frequency stats (this function needs group, strata, and substance columns)
+			freq_stats <- calculate_frequency_stats(presc_filtered, "substance")
+
+			# Create prevalence ratio table
+			result_table <- create_prevalence_ratio_table(
+				freq_stats,
+				"substance",
+				data_with_group = presc_filtered
 			)
 
-			validate(need(!is.null(result_table), "No results found for filter"))
+			validate(need(nrow(result_table) > 0, "No results found for filter"))
 
 			presc_by_ltc_table_data(result_table)
 
@@ -423,7 +521,6 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 				get_standard_reactable_config()
 			))
 		})
-
 		# ============================================================================
 		# RECENT PRESCRIPTIONS (from cases_controls_r)
 		# ============================================================================
