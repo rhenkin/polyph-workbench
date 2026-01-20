@@ -69,7 +69,7 @@ get_standard_reactable_config <- function() {
 		showPageInfo = FALSE,
 		searchable = TRUE,
 		showPageSizeOptions = TRUE,
-		defaultPageSize = 15,
+		defaultPageSize = 10,
 		compact = TRUE
 	)
 }
