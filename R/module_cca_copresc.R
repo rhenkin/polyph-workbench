@@ -14,7 +14,7 @@ module_cca_copresc_ui <- function(id) {
 	accordion(
 		open = FALSE,
 		accordion_panel(
-			title = "Co-prescription Analysis (Case-Control Comparison)",
+			title = "Co-prescription Analysis ",
 			value = "copresc_results_panel",
 			icon = bs_icon("graph-up"),
 
@@ -22,8 +22,7 @@ module_cca_copresc_ui <- function(id) {
 			div(
 				class = "alert alert-info",
 				style = "margin-bottom: 15px;",
-				HTML("<strong>Analysis type:</strong> This analysis calculates the odds ratio of having
-             <em>both medications</em> in cases compared to controls. For example, an OR of 2.5
+				HTML("<strong>How to interpret results:</strong> An OR of 2.5
              for Drug A + Drug B means cases are 2.5x more likely to have been prescribed both
              drugs together compared to controls.")
 			),
@@ -197,7 +196,8 @@ module_cca_copresc_server <- function(id, prescriptions_r, patient_data_r, bnf_l
 			sort_asc <- input$forest_sort_asc
 
 			if (sort_col == "or_diff") {
-				setorder(table_data, -abs_or_diff)
+				if ("abs_or_diff" %in% colnames(table_data))
+					setorder(table_data, -abs_or_diff)
 			} else if (sort_col %in% c("drug1", "drug2")) {
 				if (sort_asc) {
 					setorderv(table_data, sort_col)

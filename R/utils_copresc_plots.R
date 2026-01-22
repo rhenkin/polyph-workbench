@@ -107,11 +107,12 @@ create_copresc_or_heatmap <- function(copresc_results, group_label = "Cases") {
 								field = "or_log",
 								type = "quantitative",
 								scale = list(
-									scheme = "goldred",
-									reverse = FALSE,
-									domain = c(0, max(long_df$or_log))
+									scheme = "redblue",
+									reverse = TRUE,
+									domain = c(min(long_df$or_log), max(long_df$or_log)),
+									domainMid = 0
 								),
-								legend = list(labelExpr = "round(exp(datum.value))")
+								legend = list(labelExpr = "round(exp(datum.value)*100)/100")
 							),
 							tooltip = list(
 								list(field = "drug1", type = "nominal", title = "Drug 1"),
@@ -183,9 +184,10 @@ create_copresc_or_heatmap <- function(copresc_results, group_label = "Cases") {
 						field = "or_log",
 						type = "quantitative",
 						scale = list(
-							scheme = "goldred",
-							reverse = FALSE,
-							domain = c(0, max(long_df$or_log))
+							scheme = "redblue",
+							reverse = TRUE,
+							domain = c(min(long_df$or_log), max(long_df$or_log)),
+							domainMid = 0
 						),
 						legend = NULL
 					)
