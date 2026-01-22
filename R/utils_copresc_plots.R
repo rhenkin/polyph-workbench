@@ -107,11 +107,12 @@ create_copresc_or_heatmap <- function(copresc_results, group_label = "Cases") {
 								field = "or_log",
 								type = "quantitative",
 								scale = list(
-									scheme = "goldred",
-									reverse = FALSE,
-									domain = c(0, max(long_df$or_log))
+									scheme = "redblue",
+									reverse = TRUE,
+									domain = c(min(long_df$or_log), max(long_df$or_log)),
+									domainMid = 0
 								),
-								legend = list(labelExpr = "round(exp(datum.value))")
+								legend = list(labelExpr = "round(exp(datum.value)*100)/100")
 							),
 							tooltip = list(
 								list(field = "drug1", type = "nominal", title = "Drug 1"),
@@ -183,9 +184,10 @@ create_copresc_or_heatmap <- function(copresc_results, group_label = "Cases") {
 						field = "or_log",
 						type = "quantitative",
 						scale = list(
-							scheme = "goldred",
-							reverse = FALSE,
-							domain = c(0, max(long_df$or_log))
+							scheme = "redblue",
+							reverse = TRUE,
+							domain = c(min(long_df$or_log), max(long_df$or_log)),
+							domainMid = 0
 						),
 						legend = NULL
 					)
@@ -202,162 +204,112 @@ create_copresc_or_heatmap <- function(copresc_results, group_label = "Cases") {
 	return(vegawidget::as_vegaspec(spec))
 }
 
-#' Create Forest Plot for Co-prescription Analysis
+#' Create forest plot for co-prescription case-control ORs
 #'
-#' Creates a forest plot showing case and control ORs side-by-side for each drug pair
-#' Uses rule marks for CI lines and point marks for OR estimates
-#'
-#' @param data data.table with columns: drug_pair, drug1, drug2,
-#'   case_or, case_ci_lower, case_ci_upper,
-#'   control_or, control_ci_lower, control_ci_upper
+#' @param data data.table with columns: pair_label, or, ci_lower, ci_upper, p_adjusted
 #' @return vegaspec object
 create_copresc_forest_plot <- function(data) {
 
-	# Prepare data in long format for grouped display
-	# Each drug pair will have two rows: one for case, one for control
-	data_long <- rbindlist(list(
-		data[, .(
-			drug_pair = drug_pair,
-			drug1 = drug1,
-			drug2 = drug2,
-			group = "case",
-			or = case_or,
-			ci_lower = case_ci_lower,
-			ci_upper = case_ci_upper
-		)],
-		data[, .(
-			drug_pair = drug_pair,
-			drug1 = drug1,
-			drug2 = drug2,
-			group = "control",
-			or = control_or,
-			ci_lower = control_ci_lower,
-			ci_upper = control_ci_upper
-		)]
-	))
+	# Add significance marker
+	data[, significant := p_adjusted < 0.05]
 
-	# Filter out invalid values
-	data_long <- data_long[!is.na(or) & is.finite(or) &
-												 	!is.na(ci_lower) & is.finite(ci_lower) &
-												 	!is.na(ci_upper) & is.finite(ci_upper)]
+	# Calculate y position (reverse order for plotting)
+	data[, y_pos := 1:.N]
 
-	if (nrow(data_long) == 0) {
-		return(NULL)
-	}
-
-	# Get unique drug pairs in order for y-axis
-	drug_pair_order <- unique(data$drug_pair)
-
-	# Calculate max CI for x-axis scale
-	max_ci <- max(data_long$ci_upper, na.rm = TRUE)
-	x_max <- min(max_ci * 1.1, 20)  # Cap at 20 for readability
-
-	# Create Vega-Lite spec
+	# Create specification
 	spec <- list(
 		`$schema` = vegawidget::vega_schema(),
-		data = list(values = data_long),
-		width = 600,
-		height = 25 * length(drug_pair_order),
-		title = "Co-prescription Odds Ratios: Cases vs Controls",
-		encoding = list(
-			y = list(
-				field = "drug_pair",
-				type = "nominal",
-				title = NULL,
-				sort = drug_pair_order,
-				axis = list(
-					labelFontSize = 11,
-					labelLimit = 250,
-					minExtent = 250
-				)
-			),
-			yOffset = list(
-				field = "group",
-				type = "nominal",
-				scale = list(
-					domain = c("case", "control"),
-					range = c(0, 20)  # Offset to show case/control on same row
-				)
-			)
-		),
+		width = 800,
+		height = max(400, nrow(data) * 25),
+		data = list(values = data),
+
 		layer = list(
-			#Reference line at OR = 1
+			# Reference line at OR = 1
 			list(
 				mark = list(
 					type = "rule",
-					strokeDash = c(3, 3),
+					strokeDash = list(5, 5),
 					color = "gray"
 				),
 				encoding = list(
-					x = list(datum = 1),
-					y = list()
+					x = list(datum = 1)
 				)
 			),
-			# CI lines (rule mark with x and x2)
+
+			# Confidence interval lines
 			list(
-				mark = list(
-					type = "rule",
-					size = 2
-				),
+				mark = "rule",
 				encoding = list(
+					y = list(
+						field = "pair_label",
+						type = "nominal",
+						axis = list(
+							title = NULL,
+							labelLimit = 300
+						),
+						sort = list(field = "y_pos", order = "ascending")
+					),
 					x = list(
 						field = "ci_lower",
 						type = "quantitative",
-						title = "Odds Ratio",
-						# scale = list(
-						# 	domain = c(0, x_max),
-						# 	type = "log",
-						# 	nice = FALSE
-						# ),
-						axis = list(
-							grid = TRUE,
-							tickCount = 10
-						)
+						scale = list(type = "log"),
+						axis = list(title = "Odds Ratio (log scale)")
 					),
-					x2 = list(
-						field = "ci_upper"
-					),
+					x2 = list(field = "ci_upper"),
 					color = list(
-						field = "group",
+						field = "significant",
 						type = "nominal",
 						scale = list(
-							domain = c("case", "control"),
-							range = c("#e74c3c", "#3498db")  # Red for cases, blue for controls
+							domain = list(TRUE, FALSE),
+							range = list("#d62728", "#7f7f7f")
 						),
 						legend = list(
-							title = "Group",
+							title = "FDR < 0.05",
 							orient = "top"
 						)
 					)
 				)
 			),
-			# OR point estimates
+
+			# Point estimates
 			list(
 				mark = list(
 					type = "point",
 					filled = TRUE,
-					size = 80
+					size = 100
 				),
 				encoding = list(
+					y = list(
+						field = "pair_label",
+						type = "nominal",
+						sort = list(field = "y_pos", order = "ascending")
+					),
 					x = list(
 						field = "or",
-						type = "quantitative"
+						type = "quantitative",
+						scale = list(type = "log")
 					),
 					color = list(
-						field = "group",
-						type = "nominal"
+						field = "significant",
+						type = "nominal",
+						scale = list(
+							domain = list(TRUE, FALSE),
+							range = list("#d62728", "#7f7f7f")
+						)
 					),
 					tooltip = list(
-						list(field = "drug_pair", type = "nominal", title = "Drug Pair"),
-						list(field = "group", type = "nominal", title = "Group"),
+						list(field = "pair_label", type = "nominal", title = "Drug Pair"),
 						list(field = "or", type = "quantitative", title = "OR", format = ".2f"),
-						list(field = "ci_lower", type = "quantitative", title = "CI Lower", format = ".2f"),
-						list(field = "ci_upper", type = "quantitative", title = "CI Upper", format = ".2f")
+						list(field = "ci_lower", type = "quantitative", title = "95% CI Lower", format = ".2f"),
+						list(field = "ci_upper", type = "quantitative", title = "95% CI Upper", format = ".2f"),
+						list(field = "pct_case_both", type = "quantitative", title = "Cases (%)", format = ".1f"),
+						list(field = "pct_control_both", type = "quantitative", title = "Controls (%)", format = ".1f"),
+						list(field = "p_adjusted", type = "quantitative", title = "P (adjusted)", format = ".3f")
 					)
 				)
 			)
 		)
 	)
 
-	vegawidget::as_vegaspec(spec)
+	return(vegawidget::as_vegaspec(spec))
 }
