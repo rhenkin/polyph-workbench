@@ -85,6 +85,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 		controls_presc[, .(patid, eventdate, index_age_days, substance, start_date, stop_date, duration, treatment, strata)]
 	), fill = TRUE)
 	all_prescriptions[, study_name := study_name]
+	all_prescriptions[, group := ifelse(treatment == 1, "case", "control")]
   setkey(all_prescriptions, patid, strata)
 
 	# ========================================================================
@@ -105,6 +106,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 
   all_patient_data <- rbindlist(list(cases_patient_data, controls_patient_data))
   all_patient_data[, study_name := study_name]
+  all_patient_data[, group := ifelse(treatment == 1, "case", "control")]
   setkey(all_patient_data, patid, strata)
 	# ========================================================================
 	# Create matched LTC data
@@ -130,6 +132,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 		controls_ltc[, .(patid, eventdate, age_days, term, treatment, strata)]
 	), fill = TRUE)
 	all_ltc[, study_name := study_name]
+	all_ltc[, group := ifelse(treatment == 1, "case", "control")]
   setkey(all_ltc, patid, strata, eventdate)
 
 	# ========================================================================
@@ -160,6 +163,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 
 
 	matched_patids <- rbindlist(list(matched_cases, matched_controls), use.names = TRUE)
+	matched_patids[, group := ifelse(treatment == 1, "case", "control")]
   setkey(matched_patids, strata, patid)
 
   # ========================================================================

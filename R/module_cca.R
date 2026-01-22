@@ -291,24 +291,24 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 				dataset <- load_cca_dataset(file.path("studies", input$dataset_list_selection))
 
 				# Filter by index date
-				filtered <- filter_by_index_date(
-					dataset$prescriptions,
-					dataset$ltcs,
-					dataset$matched_patids,
-					lookback_days = 84
-				)
+				# filtered <- filter_by_index_date(
+				# 	dataset$prescriptions,
+				# 	dataset$ltcs,
+				# 	dataset$matched_patids,
+				# 	lookback_days = 84
+				# )
 
 				# Add burden groups
 				patient_data <- add_burden_groups(
 					dataset$patient_data,
-					filtered$prescriptions,
-					filtered$ltcs
+					dataset$prescriptions,
+					dataset$ltcs
 				)
 
 				# Store in reactive values
 				patient_data_r(patient_data)
-				prescriptions_raw_r(filtered$prescriptions)
-				ltcs_r(filtered$ltcs)
+				prescriptions_raw_r(dataset$prescriptions)
+				ltcs_r(dataset$ltcs)
 				cases_controls_r(dataset$matched_patids[, .(patid, index_date, substance, group)])
 
 				# Update UI
