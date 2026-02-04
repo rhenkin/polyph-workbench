@@ -1,3 +1,4 @@
+
 module_cca_prevalence_ui <- function(id) {
 	ns <- NS(id)
 
@@ -34,6 +35,7 @@ module_cca_prevalence_ui <- function(id) {
 								 uiOutput(ns("ltc_filter_dropdown_ui"))
 					),
 					column(3,
+								 # FIXED: Changed from "background prescriptions" to be consistent
 								 div(strong("Filter by background prescriptions (optional):")),
 								 uiOutput(ns("presc_dropdown_ui"))
 					),
@@ -79,7 +81,8 @@ module_cca_prevalence_ui <- function(id) {
 								 )
 					),
 					column(3,
-								 div(strong("Filter by prescriptions (optional):")),
+								 # FIXED: Changed from "prescriptions" to "background prescriptions"
+								 div(strong("Filter by background prescriptions (optional):")),
 								 uiOutput(ns("presc_filter_dropdown_ui"))
 					),
 					column(3,
@@ -127,16 +130,16 @@ module_cca_prevalence_ui <- function(id) {
 								 )
 					),
 					column(3,
-								 div(strong("Filter by recent prescriptions (optional):")),
-								 uiOutput(ns("recent_presc_filter_dropdown_ui"))
-					),
-					column(3,
 								 div(strong("Filter by LTCs (optional):")),
 								 uiOutput(ns("recent_ltc_dropdown_ui"))
 					),
 					column(3,
 								 div(strong("Filter by background prescriptions (optional):")),
 								 uiOutput(ns("recent_bg_presc_dropdown_ui"))
+					),
+					column(3,
+								 # Empty column to maintain layout
+								 div()
 					)
 				),
 
@@ -186,10 +189,12 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 			)
 		})
 
-		# Background prescription dropdown (for LTC and recent prescription tables)
+		# Background prescription dropdown (for LTC table)
 		output$presc_dropdown_ui <- renderUI({
-			req(prescriptions_r())
-			current_level <- bnf_level
+			req(prescriptions_r(), bnf_level())  # Added bnf_level dependency
+
+			# Use bnf_level directly (it's reactive from parent)
+			current_level <- bnf_level()
 			unique_substances <- unique(prescriptions_r()$substance)
 
 			if (current_level == "BNF_Chapter") {
@@ -200,6 +205,7 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 				lookup_data <- lookup_data[order(BNF_Chapter, BNF_Section)]
 				choices <- with(lookup_data, split(BNF_Section, BNF_Chapter))
 			} else if (current_level == "BNF_Paragraph") {
+
 				lookup_data <- bnf_lookup[BNF_Paragraph %in% unique_substances,
 																	.(BNF_Paragraph, BNF_Section)] |> unique()
 				lookup_data <- lookup_data[order(BNF_Section, BNF_Paragraph)]
@@ -221,10 +227,12 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 			)
 		})
 
+
 		# Prescription filter dropdown (for prescription table - to see medications prescribed together)
 		output$presc_filter_dropdown_ui <- renderUI({
-			req(prescriptions_r())
-			current_level <- bnf_level
+			req(prescriptions_r(), bnf_level())  # Added bnf_level dependency
+
+			current_level <- bnf_level()
 			unique_substances <- unique(prescriptions_r()$substance)
 
 			if (current_level == "BNF_Chapter") {
@@ -273,14 +281,36 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 		# Recent prescription dropdown for LTC table
 		output$ltc_by_presc_recent_dropdown_ui <- renderUI({
 			if (is.null(cases_controls_r)) return(NULL)
-			req(cases_controls_r())
+			req(cases_controls_r(), bnf_level())
 
+			current_level <- bnf_level()
 			unique_substances <- sort(unique(cases_controls_r()$substance))
+
+
+			if (current_level == "BNF_Chapter") {
+				choices <- sort(unique_substances)
+			} else if (current_level == "BNF_Section") {
+				lookup_data <- bnf_lookup[BNF_Section %in% unique_substances,
+																	.(BNF_Section, BNF_Chapter)] |> unique()
+				lookup_data <- lookup_data[order(BNF_Chapter, BNF_Section)]
+				choices <- with(lookup_data, split(BNF_Section, BNF_Chapter))
+			} else if (current_level == "BNF_Paragraph") {
+				lookup_data <- bnf_lookup[BNF_Paragraph %in% unique_substances,
+																	.(BNF_Paragraph, BNF_Section)] |> unique()
+				lookup_data <- lookup_data[order(BNF_Section, BNF_Paragraph)]
+				choices <- with(lookup_data, split(BNF_Paragraph, BNF_Section))
+			} else {  # BNF_Chemical_Substance
+				lookup_data <- bnf_lookup[BNF_Chemical_Substance %in% unique_substances,
+																	.(BNF_Chemical_Substance, BNF_Paragraph)] |> unique()
+				lookup_data <- lookup_data[order(BNF_Paragraph, BNF_Chemical_Substance)]
+				choices <- with(lookup_data, split(BNF_Chemical_Substance, BNF_Paragraph))
+			}
+
 
 			virtualSelectInput(
 				ns("ltc_by_presc_recent_dropdown"),
 				label = NULL,
-				choices = unique_substances,
+				choices = choices,
 				multiple = TRUE,
 				search = TRUE
 			)
@@ -289,14 +319,34 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 		# Recent prescription dropdown for prescription table
 		output$presc_by_ltc_recent_dropdown_ui <- renderUI({
 			if (is.null(cases_controls_r)) return(NULL)
-			req(cases_controls_r())
-
+			req(cases_controls_r(), bnf_level())
+			current_level <- bnf_level()
 			unique_substances <- sort(unique(cases_controls_r()$substance))
+
+			if (current_level == "BNF_Chapter") {
+				choices <- sort(unique_substances)
+			} else if (current_level == "BNF_Section") {
+				lookup_data <- bnf_lookup[BNF_Section %in% unique_substances,
+																	.(BNF_Section, BNF_Chapter)] |> unique()
+				lookup_data <- lookup_data[order(BNF_Chapter, BNF_Section)]
+				choices <- with(lookup_data, split(BNF_Section, BNF_Chapter))
+			} else if (current_level == "BNF_Paragraph") {
+				lookup_data <- bnf_lookup[BNF_Paragraph %in% unique_substances,
+																	.(BNF_Paragraph, BNF_Section)] |> unique()
+				lookup_data <- lookup_data[order(BNF_Section, BNF_Paragraph)]
+				choices <- with(lookup_data, split(BNF_Paragraph, BNF_Section))
+			} else {  # BNF_Chemical_Substance
+				lookup_data <- bnf_lookup[BNF_Chemical_Substance %in% unique_substances,
+																	.(BNF_Chemical_Substance, BNF_Paragraph)] |> unique()
+				lookup_data <- lookup_data[order(BNF_Paragraph, BNF_Chemical_Substance)]
+				choices <- with(lookup_data, split(BNF_Chemical_Substance, BNF_Paragraph))
+			}
+
 
 			virtualSelectInput(
 				ns("presc_by_ltc_recent_dropdown"),
 				label = NULL,
-				choices = unique_substances,
+				choices = choices,
 				multiple = TRUE,
 				search = TRUE
 			)
@@ -321,9 +371,9 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 		# Background prescription dropdown for recent prescription table
 		output$recent_bg_presc_dropdown_ui <- renderUI({
 			if (is.null(cases_controls_r)) return(NULL)
-			req(prescriptions_r())
+			req(prescriptions_r(), bnf_level())  # Added bnf_level dependency
 
-			current_level <- bnf_level
+			current_level <- bnf_level()
 			unique_substances <- unique(prescriptions_r()$substance)
 
 			if (current_level == "BNF_Chapter") {
@@ -407,6 +457,7 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 				total_n = total_count
 			)
 		}
+
 
 		# ============================================================================
 		# LTC PREVALENCE TABLES
@@ -681,11 +732,14 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 					by = "patid"
 				)
 
+				# FIXED: Only pass 2 filter parameters instead of 3
+				# Removed the third parameter which was incorrectly trying to filter recent prescriptions by recent prescriptions
 				counts <- get_filtered_patient_counts(
 					recent_presc_with_strata,
 					input$recent_presc_freq_strat_variable,
 					ltc_patids,
 					bg_presc_patids,
+					NULL,  # No third filter needed
 					patient_data_r()
 				)
 
@@ -700,7 +754,6 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 									prettyNum(counts$total_n, big.mark = ","))
 				)
 			})
-
 			# Recent prescription frequency table
 			output$recent_presc_freq_table <- renderReactable({
 				req(cases_controls_r(), patient_data_r())

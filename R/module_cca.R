@@ -593,14 +593,14 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 			prescriptions_r = prescriptions_aggregated_r,  # Changed to use aggregated version
 			ltcs_r = ltcs_r,
 			cases_controls_r = cases_controls_aggregated_r,
-			bnf_level = input$cca_bnf_level
+			bnf_level = reactive(input$cca_bnf_level)
 		)
 
 		module_cca_copresc_server(
 			id = "copresc",
 			prescriptions_r = prescriptions_aggregated_r,
 			patient_data_r = patient_data_r,
-			bnf_level = input$cca_bnf_level
+			bnf_level = reactive(input$cca_bnf_level)
 		)
 
 

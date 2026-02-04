@@ -319,7 +319,7 @@ save_matched_datasets <- function(study_name, cases, controls, gold_patient, gol
 
 compute_eligible_controls_core <- function(cases_df, gold_patient, gold_ltc, gold_cp, random_seed = 4) {
 	# Set random seed for reproducibility
-	set.seed(random_seed)
+	#set.seed(random_seed)
 
 	# Get all case dates for random assignment to controls
 	case_dates <- unique(cases_df$eventdate)

@@ -159,9 +159,9 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 
 		# Load master risk pool once when module is activated
 		master_risk_pool_dataset <- reactive({
-			req(file.exists("../data/master_risk_pool_smaller.parquet"))
+			req(file.exists("../data/master_risk_pool_exc.parquet"))
 			showNotification("Opening master risk pool...", duration = 10, type = "message")
-			arrow::open_dataset("../data/master_risk_pool_smaller.parquet")
+			arrow::open_dataset("../data/master_risk_pool_exc.parquet")
 		})
 
 
