@@ -88,8 +88,8 @@ add_burden_groups <- function(patient_data, prescriptions, ltcs) {
 calculate_frequency_stats <- function(data, item_col) {
   # freq <- data[, .(N = uniqueN(patid)), by = c("group", item_col)]
   # group_totals <- data[, .(total = uniqueN(patid)), by = group]
-  freq <- data[, .(N = uniqueN(.SD,by = c("patid","strata"))), by = c("group", item_col)]
-  group_totals <- data[,.(total = uniqueN(.SD,by = c("patid","strata"))),group]
+  freq <- data[, .(N = uniqueN(.SD, by = c("patid", "strata"))), by = c("group", item_col)]
+  group_totals <- data[, .(total = uniqueN(.SD, by = c("patid", "strata"))), group]
   freq[group_totals, pct := round(N / total * 100, 2), on = "group"]
   setorder(freq, -pct)
   freq
