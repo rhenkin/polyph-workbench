@@ -136,7 +136,7 @@ module_cca_logreg_ui <- function(id) {
 						"Background medications (main effects)" = "background_main",
 						"Background med × background med (pairwise interactions)" = "background_pairwise",
 						"Recent prescription (main effects)" = "recent_main",
-						"Recent prescription × PP burden (interaction)" = "recent_pp",
+						"Recent prescription + background meds (additive)" = "recent_background_additive",
 						"Recent prescription × background med (interaction)" = "recent_background"
 					),
 					selected = "background_main"
@@ -452,6 +452,10 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 				recent_background = list(
 					text = "Recent prescription × background medication interaction, adjusting for selected LTCs",
 					formula = "treatment ~ recent_presc + background_med + recent_presc:background_med + LTCs + stratum"
+				),
+				recent_background_additive = list(
+					text = "Recent prescription adjusted for background medications as covariates",
+					formula = "treatment ~ recent_prescription + background_meds + LTCs + stratum"
 				)
 			)
 
