@@ -69,6 +69,15 @@ format_or_columns <- function(results, model_type) {
 				 	results[, background_OR_formatted := sprintf("%.3f (%.3f-%.3f)", background_OR, background_CI_lower, background_CI_upper)]
 				 	results[, interaction_OR_formatted := sprintf("%.3f (%.3f-%.3f)", interaction_OR, interaction_CI_lower, interaction_CI_upper)]
 				 	results[, combined_OR_formatted := sprintf("%.3f (%.3f-%.3f)", combined_OR, combined_CI_lower, combined_CI_upper)]
+				 },
+				 recent_background_additive = {
+				 	results[, OR_formatted := sprintf("%.2f (%.2f-%.2f)", OR, CI_lower, CI_upper)]
+				 	# Calculate percentages
+				 	if ("n_cases_exposed" %in% names(results) && "n_controls_exposed" %in% names(results) &&
+				 			"total_cases" %in% names(results) && "total_controls" %in% names(results)) {
+				 		results[, pct_cases := round(100 * n_cases_exposed / total_cases, 2)]
+				 		results[, pct_controls := round(100 * n_controls_exposed / total_controls, 2)]
+				 	}
 				 }
 	)
 
@@ -155,6 +164,19 @@ get_table_config <- function(model_type) {
 				 		pct_controls_both = colDef(name = "Controls Both %", format = colFormat(digits = 2))
 				 	),
 				 	default_sort = NULL
-				 )
+				 ),
+				 recent_background_additive = {
+				 	list(
+				 		columns = c("recent_medication", "OR_formatted", "p_value", "pct_cases", "pct_controls"),
+				 		column_defs = list(
+				 			recent_medication = colDef(name = "Medication", minWidth = 200),
+				 			OR_formatted = colDef(name = "OR (95% CI)", minWidth = 140),
+				 			p_value = colDef(name = "P-value", format = colFormat(digits = 4)),
+				 			pct_cases = colDef(name = "Cases %", format = colFormat(digits = 2)),
+				 			pct_controls = colDef(name = "Controls %", format = colFormat(digits = 2))
+				 		),
+				 		default_sort = "recent_medication"
+				 	)
+				 }
 	)
 }

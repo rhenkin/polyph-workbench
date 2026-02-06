@@ -67,6 +67,19 @@ validate_model_inputs <- function(model_type, inputs) {
 				 		return(FALSE)
 				 	}
 				 	TRUE
+				 },
+
+				 recent_background_additive = {
+				 	if (is.null(inputs$selected_recent_presc) || length(inputs$selected_recent_presc) == 0 ||
+				 			is.null(inputs$selected_background_meds) || length(inputs$selected_background_meds) == 0) {
+				 		showNotification(
+				 			"Please select at least one medication from both recent prescriptions and background medications",
+				 			type = "warning",
+				 			duration = 5
+				 		)
+				 		return(FALSE)
+				 	}
+				 	TRUE
 				 }
 	)
 }
@@ -185,7 +198,17 @@ execute_model <- function(model_type, inputs, data, selected_ltc_terms) {
 				 		selected_covariates = selected_covariates,
 				 		data = data
 				 	)
+				 },
+				 recent_background_additive = {
+				 	execute_recent_background_additive(
+				 		recent_meds = unique(inputs$selected_recent_presc),
+				 		background_meds = unique(inputs$selected_background_meds),
+				 		selected_ltcs = selected_ltc_terms,
+				 		selected_covariates = selected_covariates,
+				 		data = data
+				 	)
 				 }
+
 	)
 }
 
@@ -298,6 +321,20 @@ execute_recent_background <- function(recent_meds, background_meds, group_recent
 	)
 }
 
+execute_recent_background_additive <- function(recent_meds, background_meds,
+																							 selected_ltcs, selected_covariates, data) {
+	run_recent_background_additive_models(
+		recent_meds = recent_meds,
+		background_meds = background_meds,
+		selected_ltcs = selected_ltcs,
+		selected_covariates = selected_covariates,
+		patient_data = data$patient_data,
+		recent_prescriptions = data$cases_controls,
+		prescriptions = data$prescriptions,
+		ltcs = data$ltcs
+	)
+}
+
 #' Create all unique medication pairs
 #'
 #' @param medications character vector of medication names
@@ -328,7 +365,8 @@ get_success_message <- function(results, model_type) {
 											background_pairwise = nrow(results),
 											recent_pp = length(unique(results$medication)),
 											recent_main = length(unique(results$medication)),
-											recent_background = nrow(results)
+											recent_background = nrow(results),
+											recent_background_additive = length(unique(results$recent_medication))
 	)
 
 	sprintf("Models completed: %d results", n_results)

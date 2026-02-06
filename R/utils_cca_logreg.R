@@ -1736,3 +1736,345 @@ fit_single_recent_main_model <- function(model_data, medication, selected_ltcs,
 		return(NULL)
 	})
 }
+
+
+#' Run recent prescription models with background medications as covariates
+#'
+#' @param recent_meds character vector of recent prescription names
+#' @param background_meds character vector of background medication names
+#' @param selected_ltcs character vector of LTC terms to include as covariates
+#' @param selected_covariates character vector of additional covariates
+#' @param patient_data data.table with patid, treatment, and demographic info
+#' @param recent_prescriptions data.table from cases_controls_r with most recent prescriptions
+#' @param prescriptions data.table with background prescriptions (patid, substance, group)
+#' @param ltcs data.table with patid, term, group
+#' @return data.table with model results
+run_recent_background_additive_models <- function(recent_meds, background_meds,
+																									selected_ltcs, selected_covariates,
+																									patient_data, recent_prescriptions,
+																									prescriptions, ltcs) {
+
+	# Strip asterisks from names
+	recent_meds <- gsub("\\*$", "", recent_meds)
+	background_meds <- gsub("\\*$", "", background_meds)
+	selected_ltcs <- gsub("\\*$", "", selected_ltcs)
+
+	# Prepare the dataset with both recent and background medications
+	model_data <- prepare_recent_background_additive_data(
+		patient_data = patient_data,
+		recent_prescriptions = recent_prescriptions,
+		prescriptions = prescriptions,
+		ltcs = ltcs,
+		recent_meds = recent_meds,
+		background_meds = background_meds,
+		selected_ltcs = selected_ltcs
+	)
+
+	# Fit model for each recent medication
+	results_list <- lapply(recent_meds, function(rec_med) {
+		fit_recent_background_additive_model(
+			model_data = model_data,
+			recent_med = rec_med,
+			background_meds = background_meds,
+			selected_ltcs = selected_ltcs,
+			selected_covariates = selected_covariates
+		)
+	})
+
+	# Combine results
+	results <- rbindlist(results_list[!sapply(results_list, is.null)], fill = TRUE)
+
+	return(results)
+}
+
+
+#' Prepare data for recent prescription models with background meds as covariates
+#'
+#' @param patient_data data.table with patient characteristics
+#' @param recent_prescriptions data.table with most recent prescriptions
+#' @param prescriptions data.table with background prescriptions
+#' @param ltcs data.table with LTCs
+#' @param recent_meds character vector of recent medications
+#' @param background_meds character vector of background medications
+#' @param selected_ltcs character vector of LTCs to include
+#' @return data.table in wide format ready for modeling
+prepare_recent_background_additive_data <- function(patient_data, recent_prescriptions,
+																										prescriptions, ltcs, recent_meds,
+																										background_meds, selected_ltcs) {
+
+	# Start with patient data
+	base_data <- copy(patient_data[, .(patid, treatment, strata, eth_group, imd_quintile,
+																		 sex, pp, pp_group, n_ltc, mltc_group)])
+
+	# Create indicators for RECENT prescriptions
+	recent_filtered <- copy(recent_prescriptions[substance %in% recent_meds, .(patid, substance)])
+	recent_filtered <- unique(recent_filtered)
+
+	if (nrow(recent_filtered) > 0) {
+		recent_wide <- dcast(
+			recent_filtered,
+			patid ~ substance,
+			fun.aggregate = length,
+			value.var = "substance"
+		)
+
+		# Convert to binary indicators
+		recent_cols <- setdiff(names(recent_wide), "patid")
+		for (col in recent_cols) {
+			set(recent_wide, j = col, value = as.integer(recent_wide[[col]] > 0))
+		}
+
+		# Rename with med_ prefix and make.names() for valid R names
+		setnames(recent_wide, recent_cols, paste0("med_", make.names(recent_cols)))
+
+		# Merge with base data
+		base_data <- merge(base_data, recent_wide, by = "patid", all.x = TRUE)
+
+		# Fill NAs with 0
+		med_indicator_cols <- grep("^med_", names(base_data), value = TRUE)
+		for (col in med_indicator_cols) {
+			set(base_data, i = which(is.na(base_data[[col]])), j = col, value = 0L)
+		}
+	} else {
+		# Add columns with all zeros if no prescriptions
+		for (col in recent_meds) {
+			set(base_data, j = paste0("med_", make.names(col)), value = 0L)
+		}
+	}
+
+	# Create indicators for BACKGROUND medications
+	background_filtered <- copy(prescriptions[substance %in% background_meds, .(patid, substance)])
+	background_filtered <- unique(background_filtered)
+
+	if (nrow(background_filtered) > 0) {
+		background_wide <- dcast(
+			background_filtered,
+			patid ~ substance,
+			fun.aggregate = length,
+			value.var = "substance"
+		)
+
+		# Convert to binary indicators and add "bg_" prefix with make.names()
+		bg_cols <- setdiff(names(background_wide), "patid")
+		for (col in bg_cols) {
+			set(background_wide, j = col, value = as.integer(background_wide[[col]] > 0))
+		}
+
+		# Rename with bg_ prefix and make.names() for valid R names
+		setnames(background_wide, bg_cols, paste0("bg_", make.names(bg_cols)))
+
+		# Merge with base data
+		base_data <- merge(base_data, background_wide, by = "patid", all.x = TRUE)
+
+		# Fill NAs with 0
+		bg_indicator_cols <- grep("^bg_", names(base_data), value = TRUE)
+		for (col in bg_indicator_cols) {
+			set(base_data, i = which(is.na(base_data[[col]])), j = col, value = 0L)
+		}
+	} else {
+		# Add columns with all zeros if no prescriptions
+		for (col in background_meds) {
+			bg_col <- paste0("bg_", make.names(col))
+			set(base_data, j = bg_col, value = 0L)
+		}
+	}
+
+	# Add LTC indicators
+	ltc_filtered <- copy(ltcs[term %in% selected_ltcs, .(patid, term)])
+	ltc_filtered <- unique(ltc_filtered)
+
+	if (nrow(ltc_filtered) > 0) {
+		ltc_wide <- dcast(
+			ltc_filtered,
+			patid ~ term,
+			fun.aggregate = length,
+			value.var = "term"
+		)
+
+		# Convert to binary
+		ltc_cols_raw <- setdiff(names(ltc_wide), "patid")
+		for (col in ltc_cols_raw) {
+			set(ltc_wide, j = col, value = as.integer(ltc_wide[[col]] > 0))
+		}
+
+		# Rename with ltc_ prefix and make.names() for valid R names
+		setnames(ltc_wide, ltc_cols_raw, paste0("ltc_", make.names(ltc_cols_raw)))
+
+		# Merge with base data
+		base_data <- merge(base_data, ltc_wide, by = "patid", all.x = TRUE)
+
+		# Fill NAs with 0
+		ltc_indicator_cols <- grep("^ltc_", names(base_data), value = TRUE)
+		for (col in ltc_indicator_cols) {
+			set(base_data, i = which(is.na(base_data[[col]])), j = col, value = 0L)
+		}
+	} else {
+		# Add columns with all zeros
+		for (col in selected_ltcs) {
+			set(base_data, j = paste0("ltc_", make.names(col)), value = 0L)
+		}
+	}
+
+	return(base_data)
+}
+
+
+#' Fit single recent prescription model with background meds as covariates
+#'
+#' @param model_data data.table prepared by prepare_recent_background_additive_data
+#' @param recent_med character, name of recent medication
+#' @param background_meds character vector of background medication names
+#' @param selected_ltcs character vector of LTC terms
+#' @param selected_covariates character vector of additional covariates
+#' @return data.table with model results
+fit_recent_background_additive_model <- function(model_data, recent_med, background_meds,
+																								 selected_ltcs, selected_covariates) {
+
+	recent_col <- paste0("med_", make.names(recent_med))
+	ltc_cols <- paste0("ltc_", make.names(selected_ltcs))
+	bg_cols <- paste0("bg_", make.names(background_meds))
+
+	# Check if recent medication column exists
+	if (!recent_col %in% names(model_data)) {
+		return(data.table(
+			recent_medication = recent_med,
+			OR = NA_real_,
+			CI_lower = NA_real_,
+			CI_upper = NA_real_,
+			p_value = NA_real_,
+			n_cases_exposed = NA_integer_,
+			n_controls_exposed = NA_integer_,
+			total_cases = NA_integer_,
+			total_controls = NA_integer_,
+			n_background_meds = length(background_meds),
+			n_ltc_covariates = length(selected_ltcs),
+			convergence = "medication_not_found"
+		))
+	}
+
+	# Check for variation in recent medication
+	if (model_data[, uniqueN(get(recent_col))] < 2) {
+		total_cases <- model_data[treatment == 1, .N]
+		total_controls <- model_data[treatment == 0, .N]
+
+		return(data.table(
+			recent_medication = recent_med,
+			OR = NA_real_,
+			CI_lower = NA_real_,
+			CI_upper = NA_real_,
+			p_value = NA_real_,
+			n_cases_exposed = model_data[get(recent_col) == 1 & treatment == 1, .N],
+			n_controls_exposed = model_data[get(recent_col) == 1 & treatment == 0, .N],
+			total_cases = total_cases,
+			total_controls = total_controls,
+			n_background_meds = length(background_meds),
+			n_ltc_covariates = length(selected_ltcs),
+			convergence = "no_variation_in_medication"
+		))
+	}
+
+	# Keep only LTC columns that exist and have variation
+	existing_ltc_cols <- ltc_cols[ltc_cols %in% names(model_data)]
+	ltc_cols_with_variation <- character(0)
+	for (col in existing_ltc_cols) {
+		if (model_data[, uniqueN(get(col))] > 1) {
+			ltc_cols_with_variation <- c(ltc_cols_with_variation, col)
+		}
+	}
+
+	# Keep only background med columns that exist and have variation
+	existing_bg_cols <- bg_cols[bg_cols %in% names(model_data)]
+	bg_cols_with_variation <- character(0)
+	for (col in existing_bg_cols) {
+		if (model_data[, uniqueN(get(col))] > 1) {
+			bg_cols_with_variation <- c(bg_cols_with_variation, col)
+		}
+	}
+
+	# Build formula: treatment ~ recent_med + background_meds + ltcs + covariates + stratum
+	covariate_terms <- c(recent_col, bg_cols_with_variation, ltc_cols_with_variation)
+
+	# Add selected covariates if any
+	if (!is.null(selected_covariates) && length(selected_covariates) > 0) {
+		covariate_terms <- c(covariate_terms, selected_covariates)
+	}
+
+	model_data$group <- factor(model_data$strata)
+	formula_str <- paste0("treatment ~ ", paste(covariate_terms, collapse = " + "), " + factor(group)")
+
+	# Fit model
+	tryCatch({
+		model <- glm(
+			formula = as.formula(formula_str),
+			data = model_data,
+			family = binomial(link = "logit")
+		)
+
+		# Extract results for the recent medication
+		coef_summary <- summary(model)$coefficients
+
+		if (!recent_col %in% rownames(coef_summary)) {
+			return(data.table(
+				recent_medication = recent_med,
+				OR = NA_real_,
+				CI_lower = NA_real_,
+				CI_upper = NA_real_,
+				p_value = NA_real_,
+				n_cases_exposed = model_data[get(recent_col) == 1 & treatment == 1, .N],
+				n_controls_exposed = model_data[get(recent_col) == 1 & treatment == 0, .N],
+				total_cases = model_data[treatment == 1, .N],
+				total_controls = model_data[treatment == 0, .N],
+				n_background_meds = length(bg_cols_with_variation),
+				n_ltc_covariates = length(ltc_cols_with_variation),
+				convergence = "coefficient_not_found"
+			))
+		}
+
+		medication_row <- coef_summary[recent_col, , drop = FALSE]
+
+		# Calculate OR and CI
+		or <- exp(medication_row[1, "Estimate"])
+		se <- medication_row[1, "Std. Error"]
+		ci_lower <- exp(medication_row[1, "Estimate"] - 1.96 * se)
+		ci_upper <- exp(medication_row[1, "Estimate"] + 1.96 * se)
+		p_value <- medication_row[1, "Pr(>|z|)"]
+
+		# Calculate exposure counts
+		n_cases_exposed <- model_data[get(recent_col) == 1 & treatment == 1, .N]
+		n_controls_exposed <- model_data[get(recent_col) == 1 & treatment == 0, .N]
+		total_cases <- model_data[treatment == 1, .N]
+		total_controls <- model_data[treatment == 0, .N]
+
+		# Return results
+		data.table(
+			recent_medication = recent_med,
+			OR = or,
+			CI_lower = ci_lower,
+			CI_upper = ci_upper,
+			p_value = p_value,
+			n_cases_exposed = n_cases_exposed,
+			n_controls_exposed = n_controls_exposed,
+			total_cases = total_cases,
+			total_controls = total_controls,
+			n_background_meds = length(bg_cols_with_variation),
+			n_ltc_covariates = length(ltc_cols_with_variation),
+			convergence = ifelse(model$converged, "converged", "not_converged")
+		)
+
+	}, error = function(e) {
+		data.table(
+			recent_medication = recent_med,
+			OR = NA_real_,
+			CI_lower = NA_real_,
+			CI_upper = NA_real_,
+			p_value = NA_real_,
+			n_cases_exposed = model_data[get(recent_col) == 1 & treatment == 1, .N],
+			n_controls_exposed = model_data[get(recent_col) == 1 & treatment == 0, .N],
+			total_cases = model_data[treatment == 1, .N],
+			total_controls = model_data[treatment == 0, .N],
+			n_background_meds = length(background_meds),
+			n_ltc_covariates = length(selected_ltcs),
+			convergence = paste("error:", substr(e$message, 1, 50))
+		)
+	})
+}
