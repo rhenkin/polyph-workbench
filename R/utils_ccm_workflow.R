@@ -15,7 +15,8 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 																					 match_ratio = 4,
 																					 progress,
 																					 patient_filters = NULL,
-																					 prescription_filter = list(enabled = FALSE)) {
+																					 prescription_filter = list(enabled = FALSE),
+																					 ltc_exclusion = NULL) {
 	set.seed(42)
 	# Step 1: Build cases table
 	progress$set(message = "Filtering prescription risk table", value = 0.2, detail = "Building cases table")
@@ -48,7 +49,8 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 		ltc_data = ltc_data,
 		patient_data = patient_data,
 		pred_window = pred_window,
-		patient_filters = patient_filters
+		patient_filters = patient_filters,
+		ltc_exclusion = ltc_exclusion
 	)
 
 	# Step 2: Get eligible control pool
@@ -57,7 +59,8 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 		cases = cases,
 		master_risk_pool = master_risk_pool_dataset,
 		ltc_data = ltc_data,
-		patient_filters = patient_filters
+		patient_filters = patient_filters,
+		ltc_exclusion = ltc_exclusion
 	)
 
 	# Step 3: Sample controls
@@ -90,7 +93,8 @@ build_cases_table <- function(outcome_prescriptions,
 															ltc_data,
 															patient_data,
 															pred_window,
-															patient_filters) {
+															patient_filters,
+															ltc_exclusion) {
 	# Get case patient IDs and outcome dates
 	outcomes <- outcome_prescriptions[, .(patid, outcome_date = eventdate)] |> unique()
 	case_patids <- unique(outcomes$patid)
@@ -100,6 +104,22 @@ build_cases_table <- function(outcome_prescriptions,
 		master_risk_pool = master_risk_pool,
 		case_patids = case_patids
 	)
+
+	# Exclude patients with specific LTCs (if specified)
+	if (!is.null(ltc_exclusion) && ltc_exclusion$enabled && length(ltc_exclusion$terms) > 0) {
+		excluded_patids <- ltc_data[
+			term %in% ltc_exclusion$terms,
+			unique(patid)
+		]
+
+		n_before <- uniqueN(cases_raw$patid)
+		cases_raw <- cases_raw[!patid %in% excluded_patids]
+		n_after <- uniqueN(cases_raw$patid)
+
+		message(sprintf("Excluded %d cases with LTCs: %s",
+										n_before - n_after,
+										paste(ltc_exclusion$terms, collapse = ", ")))
+	}
 
 	# Join with outcomes and filter by prediction window
 	new_cases <- filter_cases_by_pred_window(
@@ -245,7 +265,8 @@ create_stratification_variables <- function(cases) {
 #' @param cases data.table of cases with strata
 #' @param master_risk_pool Arrow dataset
 #' @return data.table of eligible control pool
-filter_eligible_control_pool <- function(cases, master_risk_pool, ltc_data, patient_filters = NULL) {
+filter_eligible_control_pool <- function(cases, master_risk_pool, ltc_data,
+																				 patient_filters = NULL, ltc_exclusion = NULL) {
 
 	case_patids <- unique(cases$patid)
 	strata_needs <- unique(cases$strata)
@@ -304,6 +325,25 @@ filter_eligible_control_pool <- function(cases, master_risk_pool, ltc_data, pati
 									year, first_presc_bin, time_since_first_presc) |>
 		dplyr::collect() |>
 		as.data.table()
+
+
+	# Exclude patients with specific LTCs (if specified)
+	if (!is.null(ltc_exclusion) && ltc_exclusion$enabled && length(ltc_exclusion$terms) > 0) {
+		# Find patients with any of the excluded LTCs (at any point)
+		excluded_patids <- ltc_data[
+			term %in% ltc_exclusion$terms,
+			unique(patid)
+		]
+
+		n_before <- uniqueN(eligible_pool$patid)
+		eligible_pool <- eligible_pool[!patid %in% excluded_patids]
+		n_after <- uniqueN(eligible_pool$patid)
+
+		message(sprintf("Excluded %d control patients with LTCs: %s",
+										n_before - n_after,
+										paste(ltc_exclusion$terms, collapse = ", ")))
+	}
+
 	setkey(eligible_pool, patid)
 	eligible_pool[, prescription_date := as.IDate(prescription_date)]
 	setorder(eligible_pool, patid, prescription_date)
