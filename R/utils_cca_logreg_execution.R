@@ -138,7 +138,7 @@ execute_model <- function(model_type, inputs, data, selected_ltc_terms) {
 
 				 background_main = {
 				 	execute_background_main(
-				 		medications = inputs$selected_background_meds,
+				 		medications = unique(inputs$selected_background_meds),
 				 		selected_ltcs = selected_ltc_terms,
 				 		selected_covariates = selected_covariates,
 				 		data = data
@@ -147,7 +147,7 @@ execute_model <- function(model_type, inputs, data, selected_ltc_terms) {
 
 				 background_pairwise = {
 				 	execute_background_pairwise(
-				 		medications = inputs$selected_background_meds,
+				 		medications = unique(inputs$selected_background_meds),
 				 		min_coprescription_prev = inputs$interaction_min_coprescription_prev,
 				 		selected_ltcs = selected_ltc_terms,
 				 		selected_covariates = selected_covariates,
@@ -157,7 +157,7 @@ execute_model <- function(model_type, inputs, data, selected_ltc_terms) {
 
 				 recent_pp = {
 				 	execute_recent_pp(
-				 		medications = inputs$selected_recent_presc,
+				 		medications = unique(inputs$selected_recent_presc),
 				 		group_medications = inputs$group_recent_meds,
 				 		selected_ltcs = selected_ltc_terms,
 				 		selected_covariates = selected_covariates,
@@ -167,7 +167,7 @@ execute_model <- function(model_type, inputs, data, selected_ltc_terms) {
 
 				 recent_main = {
 				 	execute_recent_main(
-				 		medications = inputs$selected_recent_presc,
+				 		medications = unique(inputs$selected_recent_presc),
 				 		group_medications = inputs$group_recent_meds,
 				 		selected_ltcs = selected_ltc_terms,
 				 		selected_covariates = selected_covariates,
@@ -177,9 +177,10 @@ execute_model <- function(model_type, inputs, data, selected_ltc_terms) {
 
 				 recent_background = {
 				 	execute_recent_background(
-				 		recent_meds = inputs$selected_recent_presc,
-				 		background_meds = inputs$selected_background_meds,
+				 		recent_meds = unique(inputs$selected_recent_presc),
+				 		background_meds = unique(inputs$selected_background_meds),
 				 		group_recent = inputs$group_recent_meds,
+				 		group_background = inputs$group_background_meds,
 				 		selected_ltcs = selected_ltc_terms,
 				 		selected_covariates = selected_covariates,
 				 		data = data
@@ -281,7 +282,7 @@ execute_recent_pp <- function(medications, group_medications, selected_ltcs,
 }
 
 #' Execute recent × background interaction model
-execute_recent_background <- function(recent_meds, background_meds, group_recent,
+execute_recent_background <- function(recent_meds, background_meds, group_recent, group_background,
 																			selected_ltcs, selected_covariates, data) {
 	run_recent_background_interaction_models(
 		recent_meds = recent_meds,
@@ -292,7 +293,8 @@ execute_recent_background <- function(recent_meds, background_meds, group_recent
 		recent_prescriptions = data$cases_controls,
 		prescriptions = data$prescriptions,
 		ltcs = data$ltcs,
-		group_recent = group_recent
+		group_recent = group_recent,
+		group_background = group_background
 	)
 }
 

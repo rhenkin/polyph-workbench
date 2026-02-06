@@ -191,7 +191,7 @@ module_cca_logreg_ui <- function(id) {
 	)
 }
 
-module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r, cases_controls_r) {
+module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r, cases_controls_r, bnf_level) {
 	moduleServer(id, function(input, output, session) {
 		ns <- session$ns
 
@@ -309,25 +309,39 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 
 		# ===== STEP 2: UPDATE MEDICATION CHOICES =====
 		observe({
-			req(med_freq_data())
+			req(med_freq_data(), bnf_level())  # Added bnf_level dependency
 			med_data <- med_freq_data()
 			eligible_meds <- med_data[
 				case >= input$background_med_min_prev &
 					control >= input$background_med_min_prev,
 				substance
 			]
-			updateVirtualSelect("selected_background_meds", choices = sort(eligible_meds))
+
+			# Create a temporary data.table with just the eligible medications
+			eligible_med_data <- data.table(substance = eligible_meds)
+
+			# Use the hierarchical dropdown choices function
+			choices <- create_bnf_dropdown_choices(eligible_med_data, bnf_level())
+
+			updateVirtualSelect("selected_background_meds", choices = choices)
 		})
 
 		observe({
-			req(recent_presc_freq_data())
+			req(recent_presc_freq_data(), bnf_level())  # Added bnf_level dependency
 			recent_data <- recent_presc_freq_data()
 			eligible_recent <- recent_data[
 				case >= input$recent_presc_min_prev &
 					control >= input$recent_presc_min_prev,
 				substance
 			]
-			updateVirtualSelect("selected_recent_presc", choices = sort(eligible_recent))
+
+			# Create a temporary data.table with just the eligible medications
+			eligible_recent_data <- data.table(substance = eligible_recent)
+
+			# Use the hierarchical dropdown choices function
+			choices <- create_bnf_dropdown_choices(eligible_recent_data, bnf_level())
+
+			updateVirtualSelect("selected_recent_presc", choices = choices)
 		})
 
 		# ===== STEP 3: DYNAMIC MODEL OPTIONS =====
@@ -383,19 +397,23 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 						 		)
 						 	)
 						 ),
-
 						 recent_background = div(
 						 	checkboxInput(
 						 		ns("group_recent_meds"),
 						 		"Group all selected recent prescriptions into a single indicator variable",
 						 		value = FALSE
 						 	),
+						 	checkboxInput(
+						 		ns("group_background_meds"),
+						 		"Group all selected background medications into a single indicator variable",
+						 		value = FALSE
+						 	),
 						 	div(
 						 		class = "alert alert-info",
 						 		style = "margin-top: 5px; margin-bottom: 10px;",
 						 		tags$small(
-						 			"When checked, a single model will be run testing 'any of the selected medications' ",
-						 			"instead of separate models for each medication."
+						 			"When grouping is enabled, medications will be combined into 'any of the selected' indicators. ",
+						 			"You can group recent, background, or both independently."
 						 		)
 						 	),
 						 	div(
@@ -403,10 +421,9 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 						 		style = "margin-top: 10px;",
 						 		tags$strong("Note: "),
 						 		"You must select specific medications from both recent prescriptions and background medications above. ",
-						 		"All possible recent × background pairs will be tested."
+						 		"Models will test the selected combinations based on your grouping choices."
 						 	)
 						 ),
-
 						 NULL  # No extra options for background_main
 			)
 		})

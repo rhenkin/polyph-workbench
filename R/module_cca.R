@@ -603,13 +603,13 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 			bnf_level = reactive(input$cca_bnf_level)
 		)
 
-
 		module_cca_logreg_server(
 			id = "logreg",
 			patient_data_r = patient_data_r,
 			prescriptions_r = prescriptions_aggregated_r,
 			ltcs_r = ltcs_r,
-			cases_controls_r = cases_controls_aggregated_r
+			cases_controls_r = cases_controls_aggregated_r,
+			bnf_level = reactive(input$cca_bnf_level)
 		)
 
 	})
