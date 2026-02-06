@@ -10,7 +10,7 @@ module_ccm_ui <- function(id) {
 										 						 value = 1, min = 1, max = 10, step = 1),
 										 div("Risk-set matching using sex, binned age at prescription, binned time since first prescription and calendar year"),
 										 card(
-										 	card_header("Step 3: Filter Most Recent Prescriptions (Optional)"),
+										 	card_header("Step 3: Filter patients"),
 										 	card_body(
 										 		p("Filter which prescriptions qualify as the 'most recent prescription' for matching."),
 
@@ -45,6 +45,40 @@ module_ccm_ui <- function(id) {
 										 			),
 
 										 			textOutput(ns("filter_summary"))
+										 		),
+										 		p("Exclude cases and controls with selected LTCs"),
+
+										 		checkboxInput(
+										 			ns("use_ltc_exclusion"),
+										 			"Apply filter",
+										 			value = FALSE
+										 		),
+
+										 		conditionalPanel(
+										 			condition = "input.use_ltc_exclusion",
+										 			ns = ns,
+
+										 			virtualSelectInput(
+										 				ns("excluded_ltcs"),
+										 				"Select LTCs to exclude:",
+										 				choices = NULL,
+										 				multiple = TRUE,
+										 				search = TRUE,
+										 				optionsCount = 10,
+										 				dropboxWrapper = "body"
+										 			),
+
+										 			div(
+										 				class = "alert alert-info",
+										 				tags$strong("How to use:"),
+										 				tags$ul(
+										 					tags$li("Select individual conditions to exclude"),
+										 					tags$li("Patients with ANY of these conditions will be excluded"),
+										 					tags$li("Exclusion applies to both cases and controls")
+										 				)
+										 			),
+
+										 			textOutput(ns("exclusion_summary"))
 										 		)
 										 	)
 										 ),
@@ -123,6 +157,25 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 			)
 		})
 
+		observe({
+			req(ltc_data())
+
+			# Get unique LTCs from the data
+			available_ltcs <- unique(ltc_data()$term)
+
+			# Create grouped choices using ltc_chapters
+			# Only include chapters that have LTCs present in the data
+			grouped_choices <- with(
+				ltc_chapters[ltc %in% available_ltcs],
+				split(ltc, body_system)
+			)
+
+			updateVirtualSelect(
+				"excluded_ltcs",
+				choices = grouped_choices
+			)
+		})
+
 		prescription_filter_substances <- reactive({
 			if (!input$use_prescription_filter) {
 				return(NULL)
@@ -155,6 +208,17 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 	            length(substances),
 	            length(input$selected_bnf_groups))
 	  }
+	})
+
+	output$exclusion_summary <- renderText({
+		if (!input$use_ltc_exclusion) return("")
+
+		if (is.null(input$excluded_ltcs) || length(input$excluded_ltcs) == 0) {
+			"⚠️ No LTCs selected - please select at least one condition to exclude"
+		} else {
+			sprintf("✓ Will exclude patients with any of %d selected LTCs",
+							length(input$excluded_ltcs))
+		}
 	})
 
 		# Load master risk pool once when module is activated
@@ -200,6 +264,14 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 							enabled = TRUE,
 							substances = prescription_filter_substances(),
 							bnf_groups = input$selected_bnf_groups  # Save the actual selections
+						)
+					} else {
+						list(enabled = FALSE)
+					},
+					ltc_exclusion = if (input$use_ltc_exclusion) {
+						list(
+							enabled = TRUE,
+							terms = input$excluded_ltcs
 						)
 					} else {
 						list(enabled = FALSE)
