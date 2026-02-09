@@ -37,6 +37,15 @@ run_logistic_models <- function(medications, selected_ltcs, selected_covariates,
 	# Combine results
 	results <- rbindlist(results_list, fill = TRUE)
 
+	# Collect all covariates
+	all_covariates_list <- lapply(results_list, function(x) attr(x, "all_covariates"))
+	all_covariates_combined <- rbindlist(all_covariates_list[!sapply(all_covariates_list, is.null)], fill = TRUE)
+
+	# Attach to final results
+	if (nrow(all_covariates_combined) > 0) {
+		setattr(results, "all_covariates", all_covariates_combined)
+	}
+
 	return(results)
 }
 
@@ -83,6 +92,16 @@ run_interaction_models <- function(med_pairs, selected_ltcs, selected_covariates
 
 	# Combine results
 	results <- rbindlist(results_list, fill = TRUE)
+	message("Finished running interaction models")
+
+	# # Collect all covariates
+	# all_covariates_list <- lapply(results_list, function(x) attr(x, "all_covariates"))
+	# all_covariates_combined <- rbindlist(all_covariates_list[!sapply(all_covariates_list, is.null)], fill = TRUE)
+	#
+	# # Attach to final results
+	# if (nrow(all_covariates_combined) > 0) {
+	# 	setattr(results, "all_covariates", all_covariates_combined)
+	# }
 
 	return(results)
 }
@@ -189,14 +208,23 @@ fit_interaction_model <- function(model_data, med1, med2, selected_ltcs, selecte
 
 	# Fit model
 	tryCatch({
+		message("Trying to run model")
 		model <- glm(
 			formula = as.formula(formula_str),
 			data = model_data,
 			family = binomial(link = "logit")
 		)
-
+		message("Finished")
 		# Extract results for ALL terms
 		coef_summary <- summary(model)$coefficients
+
+		# Extract all covariate coefficients
+		all_covariates <- extract_all_covariates(coef_summary, paste(med1_col, med2_col, sep = "+"))
+		# all_covariates <- NULL
+		# Create a unique identifier for this model result
+		if (!is.null(all_covariates)) {
+			all_covariates[, model_id := paste(med_col, collapse = "_")] # Adjust based on what identifies this model
+		}
 
 		# EXTRACT MED1 MAIN EFFECT
 		if (med1_col %in% rownames(coef_summary)) {
@@ -298,7 +326,7 @@ fit_interaction_model <- function(model_data, med1, med2, selected_ltcs, selecte
 		pct_cases_both <- round(100 * n_cases_both / total_cases, 2)
 		pct_controls_both <- round(100 * n_controls_both / total_controls, 2)
 
-		data.table(
+		result <- data.table(
 			med1 = med1,
 			med2 = med2,
 			med1_OR = med1_or,
@@ -323,6 +351,13 @@ fit_interaction_model <- function(model_data, med1, med2, selected_ltcs, selecte
 			n_ltc_covariates = length(ltc_cols_with_variation),
 			convergence = "success"
 		)
+
+		# Attach all covariates as an attribute
+		if (!is.null(all_covariates) && nrow(all_covariates) > 0) {
+			setattr(result, "all_covariates", all_covariates)
+		}
+
+		return(result)
 
 	}, error = function(e) {
 		n_cases_both_err <- tryCatch(
@@ -575,6 +610,15 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 
 		# Extract results for the medication
 		coef_summary <- summary(model)$coefficients
+
+		# Extract all covariate coefficients
+		all_covariates <- extract_all_covariates(coef_summary, med_col)
+
+		# Create a unique identifier for this model result
+		if (!is.null(all_covariates)) {
+			all_covariates[, model_id := paste(med_col, collapse = "_")] # Adjust based on what identifies this model
+		}
+
 		medication_row <- coef_summary[med_col, , drop = FALSE]
 
 		# Calculate OR and CI
@@ -592,7 +636,7 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 		total_cases <- model_data[treatment == 1, .N]
 		total_controls <- model_data[treatment == 0, .N]
 
-		data.table(
+		result <- data.table(
 			medication = medication,
 			OR = or,
 			CI_lower = ci_lower,
@@ -605,6 +649,13 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 			n_ltc_covariates = length(ltc_cols_with_variation),
 			convergence = "success"
 		)
+
+		# Attach all covariates as an attribute
+		if (!is.null(all_covariates) && nrow(all_covariates) > 0) {
+			setattr(result, "all_covariates", all_covariates)
+		}
+
+		return(result)
 
 	}, error = function(e) {
 		n_cases_err <- tryCatch(
@@ -682,6 +733,17 @@ fit_pp_interaction_models <- function(selected_ltcs, selected_covariates, medica
 
 	# Combine results and remove NULL entries
 	results <- rbindlist(results_list[!sapply(results_list, is.null)], fill = TRUE)
+
+	# Collect all covariates from each result
+	all_covariates_list <- lapply(results_list, function(x) {
+		if (!is.null(x)) attr(x, "all_covariates") else NULL
+	})
+	all_covariates_combined <- rbindlist(all_covariates_list[!sapply(all_covariates_list, is.null)], fill = TRUE)
+
+	# Attach to final results
+	if (!is.null(all_covariates_combined) && nrow(all_covariates_combined) > 0) {
+		setattr(results, "all_covariates", all_covariates_combined)
+	}
 
 	return(results)
 }
@@ -841,6 +903,14 @@ fit_single_pp_interaction_model <- function(model_data, medication, selected_ltc
 		# Extract coefficients
 		coef_summary <- summary(model)$coefficients
 
+		# Extract all covariate coefficients
+		all_covariates <- extract_all_covariates(coef_summary, med_col)
+
+		# Create a unique identifier for this model result
+		if (!is.null(all_covariates)) {
+			all_covariates[, model_id := paste(med_col, collapse = "_")] # Adjust based on what identifies this model
+		}
+
 		# Get main medication effect
 		main_effect <- extract_coefficient(coef_summary, med_col)
 
@@ -876,6 +946,11 @@ fit_single_pp_interaction_model <- function(model_data, medication, selected_ltc
 
 		# Add prevalence information
 		result <- add_prevalence_info(result, model_data, med_col)
+
+		# Attach all covariates as an attribute
+		if (!is.null(all_covariates) && nrow(all_covariates) > 0) {
+			setattr(result, "all_covariates", all_covariates)
+		}
 
 		return(result)
 
@@ -1152,6 +1227,16 @@ run_recent_background_interaction_models <- function(recent_meds, background_med
 	# Combine results and remove NULL entries
 	results <- rbindlist(results_list[!sapply(results_list, is.null)], fill = TRUE)
 
+
+	# Collect all covariates
+	all_covariates_list <- lapply(results_list, function(x) attr(x, "all_covariates"))
+	all_covariates_combined <- rbindlist(all_covariates_list[!sapply(all_covariates_list, is.null)], fill = TRUE)
+
+	# Attach to final results
+	if (nrow(all_covariates_combined) > 0) {
+		setattr(results, "all_covariates", all_covariates_combined)
+	}
+
 	return(results)
 }
 
@@ -1380,6 +1465,14 @@ fit_recent_background_interaction_model <- function(model_data, recent_med,
 
 		coef_summary <- summary(model)$coefficients
 
+		# Extract all covariate coefficients
+		all_covariates <- extract_all_covariates(coef_summary, recent_col)
+
+		# Create a unique identifier for this model result
+		if (!is.null(all_covariates)) {
+			all_covariates[, model_id := paste(covariate_terms, collapse = "_")] # Adjust based on what identifies this model
+		}
+
 		# Extract RECENT medication main effect
 		if (recent_col %in% rownames(coef_summary)) {
 			recent_row <- coef_summary[recent_col, , drop = FALSE]
@@ -1432,7 +1525,7 @@ fit_recent_background_interaction_model <- function(model_data, recent_med,
 		combined_ci_upper <- recent_ci_upper * background_ci_upper * interaction_ci_upper
 
 		# Return results
-		data.table(
+		result <- data.table(
 			recent_med = recent_med,
 			background_med = background_med,
 			recent_OR = recent_or,
@@ -1457,6 +1550,13 @@ fit_recent_background_interaction_model <- function(model_data, recent_med,
 			n_ltc_covariates = length(ltc_cols_with_variation),
 			convergence = "success"
 		)
+
+		# Attach all covariates as an attribute
+		if (!is.null(all_covariates) && nrow(all_covariates) > 0) {
+			setattr(result, "all_covariates", all_covariates)
+		}
+
+		return(result)
 
 	}, error = function(e) {
 		data.table(
@@ -1540,6 +1640,16 @@ fit_recent_main_models <- function(selected_ltcs, selected_covariates, medicatio
 
 	# Combine results and remove NULL entries
 	results <- rbindlist(results_list[!sapply(results_list, is.null)], fill = TRUE)
+
+
+	# Collect all covariates
+	all_covariates_list <- lapply(results_list, function(x) attr(x, "all_covariates"))
+	all_covariates_combined <- rbindlist(all_covariates_list[!sapply(all_covariates_list, is.null)], fill = TRUE)
+
+	# Attach to final results
+	if (nrow(all_covariates_combined) > 0) {
+		setattr(results, "all_covariates", all_covariates_combined)
+	}
 
 	return(results)
 }
@@ -1689,6 +1799,14 @@ fit_single_recent_main_model <- function(model_data, medication, selected_ltcs,
 		# Extract coefficients
 		coef_summary <- summary(model)$coefficients
 
+		# Extract all covariate coefficients
+		all_covariates <- extract_all_covariates(coef_summary, med_col)
+
+		# Create a unique identifier for this model result
+		if (!is.null(all_covariates)) {
+			all_covariates[, model_id := paste(med_col, collapse = "_")] # Adjust based on what identifies this model
+		}
+
 		# Get medication effect
 		if (med_col %in% rownames(coef_summary)) {
 			med_row <- coef_summary[med_col, , drop = FALSE]
@@ -1726,6 +1844,11 @@ fit_single_recent_main_model <- function(model_data, medication, selected_ltcs,
 			n_ltc_covariates = length(ltc_cols_with_variation),
 			convergence = "success"
 		)
+
+		# Attach all covariates as an attribute
+		if (!is.null(all_covariates) && nrow(all_covariates) > 0) {
+			setattr(result, "all_covariates", all_covariates)
+		}
 
 		# Format OR for display
 		result[, OR_formatted := sprintf("%.2f (%.2f-%.2f)", OR, CI_lower, CI_upper)]
@@ -1783,6 +1906,16 @@ run_recent_background_additive_models <- function(recent_meds, background_meds,
 
 	# Combine results
 	results <- rbindlist(results_list[!sapply(results_list, is.null)], fill = TRUE)
+
+
+	# Collect all covariates
+	all_covariates_list <- lapply(results_list, function(x) attr(x, "all_covariates"))
+	all_covariates_combined <- rbindlist(all_covariates_list[!sapply(all_covariates_list, is.null)], fill = TRUE)
+
+	# Attach to final results
+	if (nrow(all_covariates_combined) > 0) {
+		setattr(results, "all_covariates", all_covariates_combined)
+	}
 
 	return(results)
 }
@@ -2013,6 +2146,14 @@ fit_recent_background_additive_model <- function(model_data, recent_med, backgro
 		# Extract results for the recent medication
 		coef_summary <- summary(model)$coefficients
 
+		# Extract all covariate coefficients
+		all_covariates <- extract_all_covariates(coef_summary, recent_col)
+
+		# Create a unique identifier for this model result
+		if (!is.null(all_covariates)) {
+			all_covariates[, model_id := paste(recent_col, collapse = "_")] # Adjust based on what identifies this model
+		}
+
 		if (!recent_col %in% rownames(coef_summary)) {
 			return(data.table(
 				recent_medication = recent_med,
@@ -2046,7 +2187,7 @@ fit_recent_background_additive_model <- function(model_data, recent_med, backgro
 		total_controls <- model_data[treatment == 0, .N]
 
 		# Return results
-		data.table(
+		result <- data.table(
 			recent_medication = recent_med,
 			OR = or,
 			CI_lower = ci_lower,
@@ -2060,6 +2201,13 @@ fit_recent_background_additive_model <- function(model_data, recent_med, backgro
 			n_ltc_covariates = length(ltc_cols_with_variation),
 			convergence = ifelse(model$converged, "converged", "not_converged")
 		)
+
+		# Attach all covariates as an attribute
+		if (!is.null(all_covariates) && nrow(all_covariates) > 0) {
+			setattr(result, "all_covariates", all_covariates)
+		}
+
+		return(result)
 
 	}, error = function(e) {
 		data.table(
@@ -2077,4 +2225,39 @@ fit_recent_background_additive_model <- function(model_data, recent_med, backgro
 			convergence = paste("error:", substr(e$message, 1, 50))
 		)
 	})
+}
+
+#' Extract all covariate coefficients from model
+#'
+#' @param coef_summary matrix from summary(model)$coefficients
+#' @param exclude_pattern character pattern for terms to exclude (like strata)
+#' @return data.table with all coefficients
+extract_all_covariates <- function(coef_summary, exclude_pattern = "^factor\\(group\\)") {
+	# Get all coefficient names
+	all_terms <- rownames(coef_summary)
+
+	# Exclude intercept and strata effects
+	covariate_terms <- all_terms[!grepl("Intercept", all_terms) &
+															 	!grepl(exclude_pattern, all_terms)]
+
+	if (length(covariate_terms) == 0) {
+		return(NULL)
+	}
+
+	# Extract each covariate
+	results <- lapply(covariate_terms, function(term) {
+		row <- coef_summary[term, , drop = FALSE]
+		data.table(
+			covariate = term,
+			estimate = row[1, "Estimate"],
+			std_error = row[1, "Std. Error"],
+			z_value = row[1, "z value"],
+			p_value = row[1, "Pr(>|z|)"],
+			OR = exp(row[1, "Estimate"]),
+			CI_lower = exp(row[1, "Estimate"] - 1.96 * row[1, "Std. Error"]),
+			CI_upper = exp(row[1, "Estimate"] + 1.96 * row[1, "Std. Error"])
+		)
+	})
+
+	rbindlist(results)
 }

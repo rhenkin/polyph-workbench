@@ -598,10 +598,40 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 					recent_pp = "recent_pp_interaction",
 					recent_background = "recent_background_interaction"
 				)
-				paste0("logreg_", model_name, "_", Sys.Date(), ".csv")
+				paste0("logreg_", model_name, "_", Sys.Date(), ".xlsx")
 			},
 			content = function(file) {
-				fwrite(model_results_r(), file)
+				req(model_results_r())
+
+				# Create workbook with multiple sheets
+				wb <- openxlsx::createWorkbook()
+
+				# Sheet 1: Main results (what's currently shown)
+				openxlsx::addWorksheet(wb, "Main Results")
+				openxlsx::writeData(wb, "Main Results", model_results_r())
+
+				# Sheet 2: All covariates (if available)
+				if (!is.null(attr(model_results_r(), "all_covariates"))) {
+					openxlsx::addWorksheet(wb, "All Covariates")
+					openxlsx::writeData(wb, "All Covariates",
+															attr(model_results_r(), "all_covariates"))
+				}
+
+				# Sheet 3: Model metadata
+				metadata <- data.table(
+					parameter = c("Model Type", "N LTC Covariates", "Selected Covariates",
+												"Run Date", "Convergence Status"),
+					value = c(input$model_type,
+										paste(unique(model_results_r()$n_ltc_covariates), collapse = ", "),
+										paste(input$selected_covariates, collapse = ", "),
+										as.character(Sys.Date()),
+										paste(unique(model_results_r()$convergence), collapse = "; "))
+				)
+				openxlsx::addWorksheet(wb, "Metadata")
+				openxlsx::writeData(wb, "Metadata", metadata)
+
+				# Save workbook
+				openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
 			}
 		)
 
