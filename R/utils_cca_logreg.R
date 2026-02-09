@@ -92,16 +92,16 @@ run_interaction_models <- function(med_pairs, selected_ltcs, selected_covariates
 
 	# Combine results
 	results <- rbindlist(results_list, fill = TRUE)
-	message("Finished running interaction models")
 
-	# # Collect all covariates
-	# all_covariates_list <- lapply(results_list, function(x) attr(x, "all_covariates"))
-	# all_covariates_combined <- rbindlist(all_covariates_list[!sapply(all_covariates_list, is.null)], fill = TRUE)
-	#
-	# # Attach to final results
-	# if (nrow(all_covariates_combined) > 0) {
-	# 	setattr(results, "all_covariates", all_covariates_combined)
-	# }
+
+	# Collect all covariates
+	all_covariates_list <- lapply(results_list, function(x) attr(x, "all_covariates"))
+	all_covariates_combined <- rbindlist(all_covariates_list[!sapply(all_covariates_list, is.null)], fill = TRUE)
+
+	# Attach to final results
+	if (nrow(all_covariates_combined) > 0) {
+		setattr(results, "all_covariates", all_covariates_combined)
+	}
 
 	return(results)
 }
@@ -208,13 +208,13 @@ fit_interaction_model <- function(model_data, med1, med2, selected_ltcs, selecte
 
 	# Fit model
 	tryCatch({
-		message("Trying to run model")
+
 		model <- glm(
 			formula = as.formula(formula_str),
 			data = model_data,
 			family = binomial(link = "logit")
 		)
-		message("Finished")
+
 		# Extract results for ALL terms
 		coef_summary <- summary(model)$coefficients
 
