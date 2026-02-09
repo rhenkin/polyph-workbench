@@ -94,12 +94,14 @@ run_interaction_models <- function(med_pairs, selected_ltcs, selected_covariates
 	results <- rbindlist(results_list, fill = TRUE)
 
 
-	# Collect all covariates
-	all_covariates_list <- lapply(results_list, function(x) attr(x, "all_covariates"))
+	# Collect all covariates from each result
+	all_covariates_list <- lapply(results_list, function(x) {
+		if (!is.null(x)) attr(x, "all_covariates") else NULL
+	})
 	all_covariates_combined <- rbindlist(all_covariates_list[!sapply(all_covariates_list, is.null)], fill = TRUE)
 
 	# Attach to final results
-	if (nrow(all_covariates_combined) > 0) {
+	if (!is.null(all_covariates_combined) && nrow(all_covariates_combined) > 0) {
 		setattr(results, "all_covariates", all_covariates_combined)
 	}
 
@@ -219,12 +221,7 @@ fit_interaction_model <- function(model_data, med1, med2, selected_ltcs, selecte
 		coef_summary <- summary(model)$coefficients
 
 		# Extract all covariate coefficients
-		all_covariates <- extract_all_covariates(coef_summary, paste(med1_col, med2_col, sep = "+"))
-		# all_covariates <- NULL
-		# Create a unique identifier for this model result
-		if (!is.null(all_covariates)) {
-			all_covariates[, model_id := paste(med_col, collapse = "_")] # Adjust based on what identifies this model
-		}
+		all_covariates <- extract_all_covariates(coef_summary)
 
 		# EXTRACT MED1 MAIN EFFECT
 		if (med1_col %in% rownames(coef_summary)) {
@@ -612,7 +609,7 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 		coef_summary <- summary(model)$coefficients
 
 		# Extract all covariate coefficients
-		all_covariates <- extract_all_covariates(coef_summary, med_col)
+		all_covariates <- extract_all_covariates(coef_summary)
 
 		# Create a unique identifier for this model result
 		if (!is.null(all_covariates)) {
@@ -904,7 +901,7 @@ fit_single_pp_interaction_model <- function(model_data, medication, selected_ltc
 		coef_summary <- summary(model)$coefficients
 
 		# Extract all covariate coefficients
-		all_covariates <- extract_all_covariates(coef_summary, med_col)
+		all_covariates <- extract_all_covariates(coef_summary)
 
 		# Create a unique identifier for this model result
 		if (!is.null(all_covariates)) {
@@ -1466,7 +1463,7 @@ fit_recent_background_interaction_model <- function(model_data, recent_med,
 		coef_summary <- summary(model)$coefficients
 
 		# Extract all covariate coefficients
-		all_covariates <- extract_all_covariates(coef_summary, recent_col)
+		all_covariates <- extract_all_covariates(coef_summary)
 
 		# Create a unique identifier for this model result
 		if (!is.null(all_covariates)) {
@@ -1800,7 +1797,7 @@ fit_single_recent_main_model <- function(model_data, medication, selected_ltcs,
 		coef_summary <- summary(model)$coefficients
 
 		# Extract all covariate coefficients
-		all_covariates <- extract_all_covariates(coef_summary, med_col)
+		all_covariates <- extract_all_covariates(coef_summary)
 
 		# Create a unique identifier for this model result
 		if (!is.null(all_covariates)) {
@@ -2147,7 +2144,7 @@ fit_recent_background_additive_model <- function(model_data, recent_med, backgro
 		coef_summary <- summary(model)$coefficients
 
 		# Extract all covariate coefficients
-		all_covariates <- extract_all_covariates(coef_summary, recent_col)
+		all_covariates <- extract_all_covariates(coef_summary)
 
 		# Create a unique identifier for this model result
 		if (!is.null(all_covariates)) {
