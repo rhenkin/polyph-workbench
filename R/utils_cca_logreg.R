@@ -214,7 +214,8 @@ fit_interaction_model <- function(model_data, med1, med2, selected_ltcs, selecte
 		model <- glm(
 			formula = as.formula(formula_str),
 			data = model_data,
-			family = binomial(link = "logit")
+			family = binomial(link = "logit"),
+			control = glm.control(maxit = 25, epsilon = 1e-8, trace = FALSE)
 		)
 
 		# Extract results for ALL terms
@@ -222,6 +223,11 @@ fit_interaction_model <- function(model_data, med1, med2, selected_ltcs, selecte
 
 		# Extract all covariate coefficients
 		all_covariates <- extract_all_covariates(coef_summary)
+
+		# Create a unique identifier for this model result
+		if (!is.null(all_covariates)) {
+			all_covariates[, model_id := paste(med1_col, med2_col, sep = "_")] # Adjust based on what identifies this model
+		}
 
 		# EXTRACT MED1 MAIN EFFECT
 		if (med1_col %in% rownames(coef_summary)) {
@@ -597,12 +603,22 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 	model_data$group <- factor(model_data$strata)
 	formula_str <- paste0("treatment ~ ", paste(covariate_terms, collapse = " + "), "+ factor(group)")
 
+
+	# Count cases and controls with medication
+	n_cases <- model_data[get(med_col) == 1 & treatment == 1, .N]
+	n_controls <- model_data[get(med_col) == 1 & treatment == 0, .N]
+
+	# Count total cases and controls (for percentage calculation)
+	total_cases <- model_data[treatment == 1, .N]
+	total_controls <- model_data[treatment == 0, .N]
+
 	# Fit model
 	tryCatch({
 		model <- glm(
 			formula = as.formula(formula_str),
 			data = model_data,
-			family = binomial(link = "logit")
+			family = binomial(link = "logit"),
+			control = glm.control(maxit = 25, epsilon = 1e-8, trace = FALSE)
 		)
 
 		# Extract results for the medication
@@ -625,13 +641,8 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 		ci_upper <- exp(medication_row[1, "Estimate"] + 1.96 * se)
 		p_value <- medication_row[1, "Pr(>|z|)"]
 
-		# Count cases and controls with medication
-		n_cases <- model_data[get(med_col) == 1 & treatment == 1, .N]
-		n_controls <- model_data[get(med_col) == 1 & treatment == 0, .N]
 
-		# Count total cases and controls (for percentage calculation)
-		total_cases <- model_data[treatment == 1, .N]
-		total_controls <- model_data[treatment == 0, .N]
+
 
 		result <- data.table(
 			medication = medication,
@@ -655,6 +666,8 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 		return(result)
 
 	}, error = function(e) {
+		message(substr(e$message, 1, 50))
+
 		n_cases_err <- tryCatch(
 			model_data[get(med_col) == 1 & treatment == 1, .N],
 			error = function(e2) NA_integer_
@@ -672,8 +685,8 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 			p_value = NA_real_,
 			n_cases = n_cases_err,
 			n_controls = n_controls_err,
-			total_cases = total_cases,
-			total_controls = total_controls,
+			total_cases = NA_integer_,
+			total_controls = NA_integer_,
 			n_ltc_covariates = length(ltc_cols_with_variation),
 			convergence = paste("error:", substr(e$message, 1, 50))
 		)
@@ -893,7 +906,8 @@ fit_single_pp_interaction_model <- function(model_data, medication, selected_ltc
 		model <- glm(
 			formula = as.formula(formula_str),
 			data = model_data,
-			family = binomial(link = "logit")
+			family = binomial(link = "logit"),
+			control = glm.control(maxit = 25, epsilon = 1e-8, trace = FALSE)
 		)
 
 
@@ -1457,7 +1471,8 @@ fit_recent_background_interaction_model <- function(model_data, recent_med,
 		model <- glm(
 			formula = as.formula(formula_str),
 			data = model_data,
-			family = binomial(link = "logit")
+			family = binomial(link = "logit"),
+			control = glm.control(maxit = 25, epsilon = 1e-8, trace = FALSE)
 		)
 
 		coef_summary <- summary(model)$coefficients
@@ -1467,7 +1482,7 @@ fit_recent_background_interaction_model <- function(model_data, recent_med,
 
 		# Create a unique identifier for this model result
 		if (!is.null(all_covariates)) {
-			all_covariates[, model_id := paste(covariate_terms, collapse = "_")] # Adjust based on what identifies this model
+			all_covariates[, model_id := paste(recent_col, background_col, collapse = "_")] # Adjust based on what identifies this model
 		}
 
 		# Extract RECENT medication main effect
@@ -1790,7 +1805,8 @@ fit_single_recent_main_model <- function(model_data, medication, selected_ltcs,
 		model <- glm(
 			formula = as.formula(formula_str),
 			data = model_data,
-			family = binomial(link = "logit")
+			family = binomial(link = "logit"),
+			control = glm.control(maxit = 25, epsilon = 1e-8, trace = FALSE)
 		)
 
 		# Extract coefficients
@@ -2137,7 +2153,8 @@ fit_recent_background_additive_model <- function(model_data, recent_med, backgro
 		model <- glm(
 			formula = as.formula(formula_str),
 			data = model_data,
-			family = binomial(link = "logit")
+			family = binomial(link = "logit"),
+			control = glm.control(maxit = 25, epsilon = 1e-8, trace = FALSE)
 		)
 
 		# Extract results for the recent medication
