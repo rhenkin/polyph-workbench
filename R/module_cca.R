@@ -169,7 +169,11 @@ module_cca_ui <- function(id) {
 												module_cca_copresc_ui(ns("copresc"))
 											)
 										),
-
+										card(
+											card_header("Time-to-outcome for cases"), card_body(
+												module_cca_temporal_ui(ns("temporal"))
+											)
+										),
 										card(
 											card_header("Logistic Regression"),
 											card_body(
@@ -272,7 +276,7 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 				patient_data_r(patient_data)
 				prescriptions_raw_r(filtered$prescriptions)
 				ltcs_r(filtered$ltcs)
-				cases_controls_r(matched_patids[, .(patid, index_date, substance, group)])
+				cases_controls_r(matched_patids[, .(patid, index_date, outcome_date, substance, group)])
 
 				# Update UI
 				accordion_panel_close("cca_accordion", "load_dataset_panel")
@@ -309,7 +313,7 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 				patient_data_r(patient_data)
 				prescriptions_raw_r(dataset$prescriptions)
 				ltcs_r(dataset$ltcs)
-				cases_controls_r(dataset$matched_patids[, .(patid, index_date, substance, group)])
+				cases_controls_r(dataset$matched_patids[, .(patid, index_date, outcome_date, substance, group)])
 
 				# Update UI
 				accordion_panel_close("cca_accordion", "load_dataset_panel")
@@ -600,6 +604,29 @@ module_cca_server <- function(id, prepared_study_data_r = NULL, bnf_filters) {
 			id = "copresc",
 			prescriptions_r = prescriptions_aggregated_r,
 			patient_data_r = patient_data_r,
+			bnf_level = reactive(input$cca_bnf_level)
+		)
+
+		# Create metadata reactive
+		metadata_r <- reactive({
+			if (!is.null(prepared_study_data_r) && !is.null(prepared_study_data_r())) {
+				# From memory
+				return(prepared_study_data_r()$metadata)
+			} else if (input$dataset_source == "disk" && !is.null(input$dataset_list_selection)) {
+				# From disk
+				study_data <- readRDS(file.path("studies", input$dataset_list_selection))
+				return(study_data$metadata)
+			}
+			return(NULL)
+		})
+
+		# Call the temporal module with metadata_r instead of risk_window
+		module_cca_temporal_server(
+			id = "temporal",
+			prescriptions_r = cases_controls_aggregated_r,
+			patient_data_r = patient_data_r,
+			ltcs_r = ltcs_r,
+			metadata_r = metadata_r,  # Pass the metadata reactive
 			bnf_level = reactive(input$cca_bnf_level)
 		)
 

@@ -175,33 +175,31 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 		# DYNAMIC DROPDOWNS FOR FILTERS
 		# ============================================================================
 
-		# LTC filter dropdown (for LTC table - to see co-morbidities)
-		output$ltc_filter_dropdown_ui <- renderUI({
-			req(ltcs_r())
-			# unique_ltcs <- sort(unique(ltcs_r()$term))
-
+		vs_input <- function(id, choices) {
 			virtualSelectInput(
-				ns("ltc_filter_dropdown"),
+				id,
 				label = NULL,
-				choices = create_ltc_dropdown_choices(ltcs_r()),
+				choices = choices,
 				multiple = TRUE,
 				search = TRUE,
 				showSelectedOptionsFirst = TRUE
 			)
+		}
+
+		# LTC filter dropdown (for LTC table - to see co-morbidities)
+		output$ltc_filter_dropdown_ui <- renderUI({
+			req(ltcs_r())
+
+			vs_input(ns("ltc_filter_dropdown"),
+							 create_ltc_dropdown_choices(ltcs_r()))
 		})
 
 		# Background prescription dropdown (for LTC table)
 		output$presc_dropdown_ui <- renderUI({
 			req(prescriptions_r(), bnf_level())  # Added bnf_level dependency
 
-			virtualSelectInput(
-				ns("presc_dropdown"),
-				label = NULL,
-				choices = create_bnf_dropdown_choices(prescriptions_r(), bnf_level()),
-				multiple = TRUE,
-				search = TRUE,
-				showSelectedOptionsFirst = TRUE
-			)
+			vs_input(ns("presc_dropdown"),
+							 create_bnf_dropdown_choices(prescriptions_r(), bnf_level()))
 		})
 
 
@@ -209,28 +207,16 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 		output$presc_filter_dropdown_ui <- renderUI({
 			req(prescriptions_r(), bnf_level())  # Added bnf_level dependency
 
-			virtualSelectInput(
-				ns("presc_filter_dropdown"),
-				label = NULL,
-				choices = create_bnf_dropdown_choices(prescriptions_r(), bnf_level()),
-				multiple = TRUE,
-				search = TRUE,
-				showSelectedOptionsFirst = TRUE
-			)
+			vs_input(ns("presc_filter_dropdown"),
+							 create_bnf_dropdown_choices(prescriptions_r(), bnf_level()))
 		})
 
 		# LTC dropdown (for prescription tables)
 		output$ltc_dropdown_ui <- renderUI({
 			req(ltcs_r())
 
-			virtualSelectInput(
-				ns("ltc_dropdown"),
-				label = NULL,
-				choices = create_ltc_dropdown_choices(ltcs_r()),
-				multiple = TRUE,
-				search = TRUE,
-				showSelectedOptionsFirst = TRUE
-			)
+			vs_input(ns("ltc_dropdown"),
+							 create_ltc_dropdown_choices(ltcs_r()))
 		})
 
 		# Recent prescription dropdown for LTC table
@@ -238,14 +224,9 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 			if (is.null(cases_controls_r)) return(NULL)
 			req(cases_controls_r(), bnf_level())
 
-			virtualSelectInput(
-				ns("ltc_by_presc_recent_dropdown"),
-				label = NULL,
-				choices = create_bnf_dropdown_choices(cases_controls_r(), bnf_level()),
-				multiple = TRUE,
-				search = TRUE,
-				showSelectedOptionsFirst = TRUE
-			)
+			vs_input(ns("ltc_by_presc_recent_dropdown"),
+							 create_bnf_dropdown_choices(cases_controls_r(), bnf_level()))
+
 		})
 
 		# Recent prescription dropdown for prescription table
@@ -253,14 +234,8 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 			if (is.null(cases_controls_r)) return(NULL)
 			req(cases_controls_r(), bnf_level())
 
-			virtualSelectInput(
-				ns("presc_by_ltc_recent_dropdown"),
-				label = NULL,
-				choices = create_bnf_dropdown_choices(cases_controls_r(), bnf_level()),
-				multiple = TRUE,
-				search = TRUE,
-				showSelectedOptionsFirst = TRUE
-			)
+			vs_input(ns("presc_by_ltc_recent_dropdown"),
+							 create_bnf_dropdown_choices(cases_controls_r(), bnf_level()))
 		})
 
 		# LTC dropdown for recent prescription table
@@ -268,14 +243,8 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 			if (is.null(cases_controls_r)) return(NULL)
 			req(ltcs_r())
 
-			virtualSelectInput(
-				ns("recent_ltc_dropdown"),
-				label = NULL,
-				choices = create_ltc_dropdown_choices(ltcs_r()),
-				multiple = TRUE,
-				search = TRUE,
-				showSelectedOptionsFirst = TRUE
-			)
+			vs_input(ns("recent_ltc_dropdown"),
+							 create_ltc_dropdown_choices(ltcs_r()))
 		})
 
 		# Background prescription dropdown for recent prescription table
@@ -283,14 +252,8 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 			if (is.null(cases_controls_r)) return(NULL)
 			req(prescriptions_r(), bnf_level())  # Added bnf_level dependency
 
-			virtualSelectInput(
-				ns("recent_bg_presc_dropdown"),
-				label = NULL,
-				choices = create_bnf_dropdown_choices(prescriptions_r(), bnf_level()),
-				multiple = TRUE,
-				search = TRUE,
-				showSelectedOptionsFirst = TRUE
-			)
+			vs_input(ns("recent_bg_presc_dropdown"),
+							 create_bnf_dropdown_choices(prescriptions_r(), bnf_level()))
 		})
 
 
@@ -371,7 +334,7 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 		})
 
 		ltc_freq_data <- reactive({
-			req(ltcs_r(), patient_data_r())
+			req(ltcs_r(), patient_data_r(), length(ltc_freq_patids())>0)
 
 			calculate_filtered_prevalence_table(
 				strat_filter_ltc_data(),
@@ -455,7 +418,7 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 		})
 
 		presc_freq_data <- reactive({
-			req(prescriptions_r(), patient_data_r())
+			req(prescriptions_r(), patient_data_r(), length(presc_freq_patids())>0)
 
 			calculate_filtered_prevalence_table(
 				strat_filter_presc_data(),
@@ -547,7 +510,7 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 			})
 
 			recent_presc_freq_data <- reactive({
-				req(cases_controls_r(), patient_data_r())
+				req(cases_controls_r(), patient_data_r(), length(recent_presc_freq_patids())>0)
 
 				calculate_filtered_prevalence_table(
 					strat_filter_recent_presc_data(),
