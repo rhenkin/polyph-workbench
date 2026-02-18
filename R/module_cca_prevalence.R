@@ -544,8 +544,8 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 				paste0("prescription_prevalence_", Sys.Date(), ".csv")
 			},
 			content = function(file) {
-				req(presc_freq_table_data())
-				fwrite(presc_freq_table_data(), file)
+				req(presc_freq_data())
+				fwrite(presc_freq_data(), file)
 			}
 		)
 
@@ -554,8 +554,8 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 				paste0("recent_prescription_prevalence_", Sys.Date(), ".csv")
 			},
 			content = function(file) {
-				req(recent_presc_freq_table_data())
-				fwrite(recent_presc_freq_table_data(), file)
+				req(recent_presc_freq_data())
+				fwrite(recent_presc_freq_data(), file)
 			}
 		)
 

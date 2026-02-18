@@ -291,11 +291,51 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 				showNotification("Matched cohort created successfully!",
 												 type = "message", duration = 3)
 
+				study_data <- prepare_study_data(
+					study_name = input$study_name,
+					cases = cases_r(),
+					controls = controls_r(),
+					gold_patient = gold_patient,
+					gold_cp = gold_cp,
+					gold_ltc = gold_ltc,
+					outcome_prescriptions = outcome_prescriptions(),
+					n_initial_cohort = uniqueN(outcome_prescriptions()$patid),
+					n_total_database = nrow(gold_patient),
+					eligible_pool_size = eligible_pool_size_r(),
+					pred_window = input$pred_window,
+					match_ratio = input$match_ratio,
+					patient_filters = patient_filter
+				)
+
+				prepared_study_data_r(study_data)
+				message("Study data prepared in memory: ", input$study_name)
+
 			}, error = function(e) {
+				error_details <- list(
+					message = e$message,
+					call = deparse(sys.call()),
+					traceback = capture.output(traceback()),
+					state = list(
+						pred_window = input$pred_window,
+						match_ratio = input$match_ratio,
+						prescription_filter_enabled = input$use_prescription_filter,
+						ltc_exclusion_enabled = input$use_ltc_exclusion,
+						n_outcome_prescriptions = nrow(outcome_prescriptions())
+					)
+				)
+
+				# Log to console
+				message("=== ERROR DETAILS ===")
+				message("Error message: ", e$message)
+				message("State at failure:")
+				print(error_details$state)
+				message("Call:")
+				message(error_details$call)
+				message("Traceback:")
+				print(error_details$traceback)
+
 				showNotification(paste("Error creating cohort:", e$message),
 												 type = "error", duration = 10)
-				message("Error: ", e$message)
-				print(traceback())
 			})
 		})
 
@@ -348,33 +388,34 @@ module_ccm_server <- function(id, patient_data, outcome_prescriptions, ltc_data,
 		})
 
 		# Prepare study data in memory when matching completes
-		observe({
-			req(cases_r(), controls_r(), input$study_name)
-
-			tryCatch({
-				study_data <- prepare_study_data(
-					study_name = input$study_name,
-					cases = cases_r(),
-					controls = controls_r(),
-					gold_patient = gold_patient,
-					gold_cp = gold_cp,
-					gold_ltc = gold_ltc,
-					outcome_prescriptions = outcome_prescriptions(),
-					n_initial_cohort = uniqueN(outcome_prescriptions()$patid),
-					n_total_database = nrow(gold_patient),
-					eligible_pool_size = eligible_pool_size_r(),
-					pred_window = input$pred_window,
-					match_ratio = input$match_ratio,
-					patient_filters = patient_filter
-				)
-
-				prepared_study_data_r(study_data)
-				message("Study data prepared in memory: ", input$study_name)
-
-			}, error = function(e) {
-				message("Error preparing study data: ", e$message)
-			})
-		})
+		# observe({
+		# 	req
+		# 	req(cases_r(), controls_r(), input$study_name)
+		#
+		# 	tryCatch({
+		# 		study_data <- prepare_study_data(
+		# 			study_name = input$study_name,
+		# 			cases = cases_r(),
+		# 			controls = controls_r(),
+		# 			gold_patient = gold_patient,
+		# 			gold_cp = gold_cp,
+		# 			gold_ltc = gold_ltc,
+		# 			outcome_prescriptions = outcome_prescriptions(),
+		# 			n_initial_cohort = uniqueN(outcome_prescriptions()$patid),
+		# 			n_total_database = nrow(gold_patient),
+		# 			eligible_pool_size = eligible_pool_size_r(),
+		# 			pred_window = input$pred_window,
+		# 			match_ratio = input$match_ratio,
+		# 			patient_filters = patient_filter
+		# 		)
+		#
+		# 		prepared_study_data_r(study_data)
+		# 		message("Study data prepared in memory: ", input$study_name)
+		#
+		# 	}, error = function(e) {
+		# 		message("Error preparing study data: ", e$message)
+		# 	})
+		# })
 
 		# Save study
 		observeEvent(input$save_study, {

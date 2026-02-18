@@ -29,8 +29,9 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 		n_before <- master_risk_pool_dataset %>% nrow()
 
 		# Apply filter using dplyr (stays as Arrow dataset, lazy evaluation)
-		master_risk_pool_dataset <- master_risk_pool_dataset %>%
-			dplyr::filter(substance %in% allowed_substances)
+		master_risk_pool_dataset <- master_risk_pool_dataset |>
+			dplyr::filter(substance %in% allowed_substances) |>
+			dplyr::compute()
 
 		# Count after filtering
 		n_after <- master_risk_pool_dataset %>% nrow()
@@ -41,6 +42,8 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 		if (n_after == 0) {
 			stop("No prescriptions remain after applying filter. Please adjust your medication selection.")
 		}
+		# ADD THIS:
+		message(sprintf("✓ Prescription filter checkpoint passed: %d rows", n_after))
 	}
 
 	cases <- build_cases_table(
@@ -53,6 +56,11 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 		ltc_exclusion = ltc_exclusion
 	)
 
+	if (is.null(cases) || nrow(cases) == 0) {
+		stop("build_cases_table returned empty result")
+	}
+	message(sprintf("✓ Cases checkpoint: %d cases created", nrow(cases)))
+
 	# Step 2: Get eligible control pool
 	progress$set(message = "Filtering prescription risk table", value = 0.5, detail= "Finding required controls")
 	eligible_pool <- filter_eligible_control_pool(
@@ -63,6 +71,12 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 		ltc_exclusion = ltc_exclusion
 	)
 
+	if (is.null(eligible_pool) || nrow(eligible_pool) == 0) {
+		stop("filter_eligible_control_pool returned empty result")
+	}
+	message(sprintf("✓ Eligible pool checkpoint: %d eligible controls", nrow(eligible_pool)))
+
+
 	# Step 3: Sample controls
 	progress$set(message = "Sampling controls...", value = 0.7)
 	controls <- sample_controls_by_strata(
@@ -70,6 +84,10 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 		cases = cases,
 		match_ratio = match_ratio
 	)
+	if (is.null(controls) || nrow(controls) == 0) {
+		stop("sample_controls_by_strata returned empty result")
+	}
+	message(sprintf("✓ Controls checkpoint: %d controls sampled", nrow(controls)))
 
 	eligible_pool_size <- nrow(eligible_pool)
 
@@ -152,6 +170,7 @@ build_cases_table <- function(outcome_prescriptions,
 
 #' Extract case prescriptions from master risk pool
 extract_cases_from_mrp <- function(master_risk_pool, case_patids) {
+	message("Collecting from parquet")
 	cases_raw <- master_risk_pool %>%
 		dplyr::filter(patid %in% case_patids) %>%
 		dplyr::select(patid, prescription_date, substance, stratum_first_presc_bin,
@@ -159,11 +178,13 @@ extract_cases_from_mrp <- function(master_risk_pool, case_patids) {
 									sex, imd_quintile, first_presc_bin, time_since_first_presc) %>%
 		dplyr::collect() %>%
 		as.data.table()
+	message("Collection complete")
 
 	# Date format conversion
 	cases_raw[, p_date := as.IDate(prescription_date)]
 	cases_raw[, prescription_date := NULL]
 	setnames(cases_raw, "p_date", "prescription_date")
+	message("Date converted")
 
 	return(cases_raw)
 }
@@ -179,7 +200,6 @@ filter_cases_by_pred_window <- function(cases_raw, outcomes, pred_window) {
 
 	# Keep only most recent prescription per patient
 	new_cases <- new_cases[, .SD[which(prescription_date == max(prescription_date))], patid]
-
 	return(new_cases)
 }
 
