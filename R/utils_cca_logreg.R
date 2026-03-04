@@ -1802,6 +1802,7 @@ fit_single_recent_main_model <- function(model_data, medication, selected_ltcs,
 
 	# Fit model
 	tryCatch({
+		browser()
 		model <- glm(
 			formula = as.formula(formula_str),
 			data = model_data,

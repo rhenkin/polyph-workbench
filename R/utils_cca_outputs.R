@@ -127,7 +127,7 @@ create_prevalence_ratio_table_old <- function(freq_data, item_col, min_pct = 0.5
 #'
 #' @examples
 #' # Basic usage with just prevalence ratios (old behavior)
-#' result <- create_prevalence_ratio_table(freq_data, "term", min_pct = 0.5)
+#' result <- create_prevalence_ratio_table(freq_data, "term", min_pct = 0.01)
 #'
 #' # Enhanced usage with odds ratios
 #' result <- create_prevalence_ratio_table(
@@ -151,8 +151,9 @@ create_prevalence_ratio_table <- function(freq_data, item_col, min_pct = 0.5,
 													 value.var = "pct",
 													 fill = 0)
 
+
 	# Filter by minimum prevalence
-	table_data_wide <- table_data_wide[case > min_pct & control > min_pct]
+	table_data_wide <- table_data_wide[case >= min_pct & control >= min_pct]
 
 	if (nrow(table_data_wide) == 0) {
 		return(NULL)
@@ -165,6 +166,8 @@ create_prevalence_ratio_table <- function(freq_data, item_col, min_pct = 0.5,
 	control_patids <- unique(data_with_group[group == "control", patid])
 	n_case <- length(case_patids)
 	n_control <- length(control_patids)
+	n_total <- n_case + n_control
+
 
 	# Get items (substances or terms)
 	items <- table_data_wide[[item_col]]
@@ -241,6 +244,9 @@ create_prevalence_ratio_table <- function(freq_data, item_col, min_pct = 0.5,
 		p_values <- pchisq(chisq_stat, df = 1, lower.tail = FALSE)
 		table_data_wide[, p_value := p_values]
 	}
+
+	overall_counts <- item_case + item_control
+	table_data_wide[, overall_prevalence := round(overall_counts / n_total * 100, 2)]
 
 	# Adjust for multiple testing (vectorized)
 	table_data_wide[, p_adj := p.adjust(p_value, method = p_adjust_method)]
@@ -438,6 +444,6 @@ calculate_prevalence_cca <- function(data1, data2, selected_values,
 #' @param dt data.table with OR, OR_CI_lower, OR_CI_upper columns
 #' @return data.table with added OR_formatted column
 add_or_formatted_column <- function(dt) {
-	dt[, OR_formatted := sprintf("%.3f (%.3f - %.3f)", OR, OR_CI_lower, OR_CI_upper)]
+	dt[, OR_formatted := sprintf("%.2f (%.2f-%.2f)", OR, OR_CI_lower, OR_CI_upper)]
 	dt
 }

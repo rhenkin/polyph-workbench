@@ -266,8 +266,7 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 
 			ltc_data <- ltc_freq_data()
 			filtered <- ltc_data[
-				case >= input$ltc_min_prev &
-					control >= input$ltc_min_prev &
+				(pmax(case,control) >= input$ltc_min_prev) &
 					(OR >= input$ltc_min_or | OR < 1/input$ltc_min_or) &
 					!is.na(OR)
 			]
@@ -312,8 +311,7 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			req(med_freq_data(), bnf_level())  # Added bnf_level dependency
 			med_data <- med_freq_data()
 			eligible_meds <- med_data[
-				case >= input$background_med_min_prev &
-					control >= input$background_med_min_prev,
+				overall_prevalence >= input$background_med_min_prev,
 				substance
 			]
 
@@ -330,8 +328,7 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			req(recent_presc_freq_data(), bnf_level())  # Added bnf_level dependency
 			recent_data <- recent_presc_freq_data()
 			eligible_recent <- recent_data[
-				case >= input$recent_presc_min_prev &
-					control >= input$recent_presc_min_prev,
+				overall_prevalence >= input$recent_presc_min_prev,
 				substance
 			]
 
@@ -534,7 +531,6 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 					filtered_data,
 					selected_ltc_terms
 				)
-
 				model_results_r(results)
 
 				# Store subgroup information
@@ -603,12 +599,15 @@ module_cca_logreg_server <- function(id, patient_data_r, prescriptions_r, ltcs_r
 			content = function(file) {
 				req(model_results_r())
 
+				res <- model_results_r()
+				res$padj <- p.adjust(res$p_value, method = "fdr")
+
 				# Create workbook with multiple sheets
 				wb <- openxlsx::createWorkbook()
 
 				# Sheet 1: Main results (what's currently shown)
 				openxlsx::addWorksheet(wb, "Main Results")
-				openxlsx::writeData(wb, "Main Results", model_results_r())
+				openxlsx::writeData(wb, "Main Results", res)
 
 				# Sheet 2: All covariates (if available)
 				if (!is.null(attr(model_results_r(), "all_covariates"))) {

@@ -54,7 +54,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 
 	# Cases: use the filtered outcome_prescriptions
 	cases_presc <- unique(cases[, .(patid, index_date, eventdate = outcome_date, index_age_days = index_age * 365.25, strata)])
-	cases_presc <- cases_presc[gold_cp, on = "patid",nomatch = 0][start_date <= index_date & stop_date >= index_date - 84]
+	cases_presc <- cases_presc[gold_cp, on = "patid",nomatch = 0][start_date < index_date & stop_date >= index_date - 84]
 	cases_presc[, treatment := 1]
 
 	# Controls: get prescriptions active at their index date
@@ -62,7 +62,7 @@ prepare_study_data <- function(study_name, cases, controls, gold_patient, gold_c
 
 	# Get all CP prescriptions for controls that were active at index date
 	controls_presc_raw <- control_index_lookup[gold_cp, on = "patid", nomatch = 0][
-		start_date <= index_date & stop_date >= index_date - 84  # 84 days lookback
+		start_date < index_date & stop_date >= index_date - 84  # 84 days lookback
 	]
 
 	# Add patient demographics to calculate outcome_age

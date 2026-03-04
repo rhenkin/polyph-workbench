@@ -50,10 +50,10 @@ format_or_columns <- function(results, model_type) {
 				 	}
 				 },
 				 background_pairwise = {
-				 	results[, med1_OR_formatted := sprintf("%.3f (%.3f-%.3f)", med1_OR, med1_CI_lower, med1_CI_upper)]
-				 	results[, med2_OR_formatted := sprintf("%.3f (%.3f-%.3f)", med2_OR, med2_CI_lower, med2_CI_upper)]
-				 	results[, interaction_OR_formatted := sprintf("%.3f (%.3f-%.3f)", interaction_OR, interaction_CI_lower, interaction_CI_upper)]
-				 	results[, combined_OR_formatted := sprintf("%.3f (%.3f-%.3f)", combined_OR, combined_CI_lower, combined_CI_upper)]
+				 	results[, med1_OR_formatted := sprintf("%.2f (%.2f-%.2f)", med1_OR, med1_CI_lower, med1_CI_upper)]
+				 	results[, med2_OR_formatted := sprintf("%.2f (%.2f-%.2f)", med2_OR, med2_CI_lower, med2_CI_upper)]
+				 	results[, interaction_OR_formatted := sprintf("%.2f (%.2f-%.2f)", interaction_OR, interaction_CI_lower, interaction_CI_upper)]
+				 	results[, combined_OR_formatted := sprintf("%.2f (%.2f-%.2f)", combined_OR, combined_CI_lower, combined_CI_upper)]
 				 },
 				 recent_pp = {
 				 	# Already formatted in the modeling function
@@ -65,10 +65,10 @@ format_or_columns <- function(results, model_type) {
 				 	NULL
 				 },
 				 recent_background = {
-				 	results[, recent_OR_formatted := sprintf("%.3f (%.3f-%.3f)", recent_OR, recent_CI_lower, recent_CI_upper)]
-				 	results[, background_OR_formatted := sprintf("%.3f (%.3f-%.3f)", background_OR, background_CI_lower, background_CI_upper)]
-				 	results[, interaction_OR_formatted := sprintf("%.3f (%.3f-%.3f)", interaction_OR, interaction_CI_lower, interaction_CI_upper)]
-				 	results[, combined_OR_formatted := sprintf("%.3f (%.3f-%.3f)", combined_OR, combined_CI_lower, combined_CI_upper)]
+				 	results[, recent_OR_formatted := sprintf("%.2f (%.2f-%.2f)", recent_OR, recent_CI_lower, recent_CI_upper)]
+				 	results[, background_OR_formatted := sprintf("%.2f (%.2f-%.2f)", background_OR, background_CI_lower, background_CI_upper)]
+				 	results[, interaction_OR_formatted := sprintf("%.2f (%.2f-%.2f)", interaction_OR, interaction_CI_lower, interaction_CI_upper)]
+				 	results[, combined_OR_formatted := sprintf("%.2f (%.2f-%.2f)", combined_OR, combined_CI_lower, combined_CI_upper)]
 				 },
 				 recent_background_additive = {
 				 	results[, OR_formatted := sprintf("%.2f (%.2f-%.2f)", OR, CI_lower, CI_upper)]

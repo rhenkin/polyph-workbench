@@ -535,7 +535,8 @@ module_cca_prevalence_server <- function(id, patient_data_r, prescriptions_r,
 			},
 			content = function(file) {
 				req(ltc_freq_data())
-				fwrite(ltc_freq_data(), file)
+				to_save <- merge(ltc_freq_data(), ltc_chapters, by.x = "term", by.y = "ltc")
+				fwrite(to_save, file)
 			}
 		)
 
