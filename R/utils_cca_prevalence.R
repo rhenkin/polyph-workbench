@@ -46,6 +46,7 @@ render_prevalence_reactable <- function(result_table, item_column_name) {
 
 	# Add formatted OR column
 	result_table <- add_or_formatted_column(result_table)
+	result_table[, overall_prevalence := NULL]
 
 	# Rename columns with standard names
 	col_names <- get_prevalence_column_names(item_column_name)

@@ -76,7 +76,6 @@ create_matched_cohort_workflow <- function(outcome_prescriptions,
 	}
 	message(sprintf("✓ Eligible pool checkpoint: %d eligible controls", nrow(eligible_pool)))
 
-
 	# Step 3: Sample controls
 	progress$set(message = "Sampling controls...", value = 0.7)
 	controls <- sample_controls_by_strata(
@@ -175,7 +174,7 @@ extract_cases_from_mrp <- function(master_risk_pool, case_patids) {
 		dplyr::filter(patid %in% case_patids) %>%
 		dplyr::select(patid, prescription_date, substance, stratum_first_presc_bin,
 									n_ltcs, concurrent_cps, age_at_rx,
-									sex, imd_quintile, first_presc_bin, time_since_first_presc) %>%
+									sex, imd_quintile, first_presc_bin, time_since_first_presc, stratum_age_year_bin) %>%
 		dplyr::collect() %>%
 		as.data.table()
 	message("Collection complete")
@@ -275,7 +274,8 @@ create_stratification_variables <- function(cases) {
 	)]
 
 	# Primary stratification variable
-	cases[, strata := stratum_first_presc_bin]
+	#cases[, strata := stratum_first_presc_bin]
+	cases[, strata := stratum_age_year_bin]
 
 	return(cases)
 }
@@ -294,7 +294,8 @@ filter_eligible_control_pool <- function(cases, master_risk_pool, ltc_data,
 	# Use Arrow to filter before collecting
 	eligible_pool <- master_risk_pool |>
 		dplyr::filter(!patid %in% case_patids) |>
-		dplyr::filter(stratum_first_presc_bin %in% strata_needs)
+		# dplyr::filter(stratum_first_presc_bin %in% strata_needs)
+		dplyr::filter(stratum_age_year_bin %in% strata_needs)
 
 	# Apply patient filters if provided
 	if (!is.null(patient_filters)) {
@@ -342,7 +343,7 @@ filter_eligible_control_pool <- function(cases, master_risk_pool, ltc_data,
 	eligible_pool <- eligible_pool |>
 		dplyr::select(patid, prescription_date, substance, sex, age_at_rx,
 									n_ltcs, imd_quintile, age_bin, stratum_first_presc_bin,
-									year, first_presc_bin, time_since_first_presc) |>
+									year, first_presc_bin, time_since_first_presc, stratum_age_year_bin) |>
 		dplyr::collect() |>
 		as.data.table()
 
@@ -370,7 +371,8 @@ filter_eligible_control_pool <- function(cases, master_risk_pool, ltc_data,
 	eligible_pool <- eligible_pool[
 		,
 		last(.SD),
-		by = .(strata = stratum_first_presc_bin, patid)
+		# by = .(strata = stratum_first_presc_bin, patid)
+		by = .(strata = stratum_age_year_bin, patid)
 	]
 	message(sprintf("Unique patient-strata combinations: %d", nrow(eligible_pool)))
 
@@ -410,7 +412,6 @@ filter_eligible_control_pool <- function(cases, master_risk_pool, ltc_data,
 #' @param match_ratio numeric desired control:case ratio
 #' @return data.table of sampled controls
 sample_controls_by_strata <- function(eligible_pool, cases, match_ratio) {
-
 	eligible_unique <- copy(eligible_pool)
 	# Calculate controls needed per stratum
 	strata_needs_dt <- cases[
