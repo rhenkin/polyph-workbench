@@ -601,7 +601,7 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 		covariate_terms <- c(covariate_terms, selected_covariates)
 	}
 	model_data$group <- factor(model_data$strata)
-	formula_str <- paste0("treatment ~ ", paste(covariate_terms, collapse = " + "), "+ factor(group)")
+	formula_str <- paste0("treatment ~ ", paste(covariate_terms, collapse = " + "), "+ strata(group)")
 
 
 	# Count cases and controls with medication
@@ -614,32 +614,50 @@ fit_single_logreg_model <- function(model_data, medication, selected_ltcs, selec
 
 	# Fit model
 	tryCatch({
-		model <- glm(
+		# model <- glm(
+		# 	formula = as.formula(formula_str),
+		# 	data = model_data,
+		# 	family = binomial(link = "logit"),
+		# 	control = glm.control(maxit = 25, epsilon = 1e-8, trace = FALSE)
+		# )
+		#
+		model <- clogit(
 			formula = as.formula(formula_str),
 			data = model_data,
-			family = binomial(link = "logit"),
-			control = glm.control(maxit = 25, epsilon = 1e-8, trace = FALSE)
+			method = "efron"
 		)
 
 		# Extract results for the medication
 		coef_summary <- summary(model)$coefficients
 
 		# Extract all covariate coefficients
-		all_covariates <- extract_all_covariates(coef_summary)
+		all_covariates <- extract_all_covariates_clogit(coef_summary)
 
 		# Create a unique identifier for this model result
 		if (!is.null(all_covariates)) {
 			all_covariates[, model_id := paste(med_col, collapse = "_")] # Adjust based on what identifies this model
 		}
 
-		medication_row <- coef_summary[med_col, , drop = FALSE]
+		# medication_row <- coef_summary[med_col, , drop = FALSE]
+		#
+		# # Calculate OR and CI
+		# or <- exp(medication_row[1, "Estimate"])
+		# se <- medication_row[1, "Std. Error"]
+		# ci_lower <- exp(medication_row[1, "Estimate"] - 1.96 * se)
+		# ci_upper <- exp(medication_row[1, "Estimate"] + 1.96 * se)
+		# p_value <- medication_row[1, "Pr(>|z|)"]
 
-		# Calculate OR and CI
-		or <- exp(medication_row[1, "Estimate"])
-		se <- medication_row[1, "Std. Error"]
-		ci_lower <- exp(medication_row[1, "Estimate"] - 1.96 * se)
-		ci_upper <- exp(medication_row[1, "Estimate"] + 1.96 * se)
-		p_value <- medication_row[1, "Pr(>|z|)"]
+		# Get medication effect
+		if (med_col %in% rownames(coef_summary)) {
+			med_row <- coef_summary[med_col, , drop = FALSE]
+			or       <- exp(med_row[1, "coef"])
+			se       <- med_row[1, "se(coef)"]
+			ci_lower <- exp(med_row[1, "coef"] - 1.96 * se)
+			ci_upper <- exp(med_row[1, "coef"] + 1.96 * se)
+			p_value  <- med_row[1, "Pr(>|z|)"]
+		} else {
+			return(NULL)
+		}
 
 
 
@@ -1765,6 +1783,7 @@ prepare_recent_main_data <- function(patient_data, recent_prescriptions, ltcs,
 fit_single_recent_main_model <- function(model_data, medication, selected_ltcs,
 																				 selected_covariates, is_grouped) {
 
+
 	if (is_grouped) {
 		med_col <- "med_grouped"
 	} else {
@@ -1798,23 +1817,30 @@ fit_single_recent_main_model <- function(model_data, medication, selected_ltcs,
 	}
 	model_data$group <- factor(model_data$strata)
 
-	formula_str <- paste0("treatment ~ ", paste(covariate_terms, collapse = " + "), " + factor(group)")
+	# formula_str <- paste0("treatment ~ ", paste(covariate_terms, collapse = " + "), " + factor(group)")
+	formula_str <- paste0("treatment ~ ", paste(covariate_terms, collapse = " + "), " + strata(group)")
 
 	# Fit model
 	tryCatch({
-		browser()
-		model <- glm(
+		# browser()
+		# model <- glm(
+		# 	formula = as.formula(formula_str),
+		# 	data = model_data,
+		# 	family = binomial(link = "logit"),
+		# 	control = glm.control(maxit = 25, epsilon = 1e-8, trace = FALSE)
+		# )
+
+		model <- clogit(
 			formula = as.formula(formula_str),
 			data = model_data,
-			family = binomial(link = "logit"),
-			control = glm.control(maxit = 25, epsilon = 1e-8, trace = FALSE)
+			method = "efron"
 		)
 
 		# Extract coefficients
 		coef_summary <- summary(model)$coefficients
 
 		# Extract all covariate coefficients
-		all_covariates <- extract_all_covariates(coef_summary)
+		all_covariates <- extract_all_covariates_clogit(coef_summary)
 
 		# Create a unique identifier for this model result
 		if (!is.null(all_covariates)) {
@@ -1824,14 +1850,16 @@ fit_single_recent_main_model <- function(model_data, medication, selected_ltcs,
 		# Get medication effect
 		if (med_col %in% rownames(coef_summary)) {
 			med_row <- coef_summary[med_col, , drop = FALSE]
-			or <- exp(med_row[1, "Estimate"])
-			se <- med_row[1, "Std. Error"]
-			ci_lower <- exp(med_row[1, "Estimate"] - 1.96 * se)
-			ci_upper <- exp(med_row[1, "Estimate"] + 1.96 * se)
-			p_value <- med_row[1, "Pr(>|z|)"]
+			or       <- exp(med_row[1, "coef"])
+			se       <- med_row[1, "se(coef)"]
+			ci_lower <- exp(med_row[1, "coef"] - 1.96 * se)
+			ci_upper <- exp(med_row[1, "coef"] + 1.96 * se)
+			p_value  <- med_row[1, "Pr(>|z|)"]
 		} else {
 			return(NULL)
 		}
+
+
 
 		# Calculate prevalence in cases and controls
 		n_cases <- model_data[get(med_col) == 1 & treatment == 1, .N]
@@ -2274,5 +2302,32 @@ extract_all_covariates <- function(coef_summary, exclude_pattern = "^factor\\(gr
 		)
 	})
 
+	rbindlist(results)
+}
+
+extract_all_covariates_clogit <- function(coef_summary, exclude_pattern = "^strata\\(group\\)") {
+	# Get all coefficient names
+	all_terms <- rownames(coef_summary)
+	# Exclude strata effects (clogit has no intercept)
+	covariate_terms <- all_terms[!grepl(exclude_pattern, all_terms)]
+
+	if (length(covariate_terms) == 0) {
+		return(NULL)
+	}
+
+	# Extract each covariate
+	results <- lapply(covariate_terms, function(term) {
+		row <- coef_summary[term, , drop = FALSE]
+		data.table(
+			covariate = term,
+			estimate  = row[1, "coef"],
+			std_error = row[1, "se(coef)"],
+			z_value   = row[1, "z"],
+			p_value   = row[1, "Pr(>|z|)"],
+			OR        = exp(row[1, "coef"]),
+			CI_lower  = exp(row[1, "coef"] - 1.96 * row[1, "se(coef)"]),
+			CI_upper  = exp(row[1, "coef"] + 1.96 * row[1, "se(coef)"])
+		)
+	})
 	rbindlist(results)
 }
